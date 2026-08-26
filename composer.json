@@ -6,9 +6,9 @@
         "livewire",
         "performance",
         "latency",
-        "n+1",
+        "n-plus-one",
         "profiling",
-        "budget"
+        "query-budget"
     ],
     "type": "library",
     "license": "MIT",
