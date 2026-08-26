@@ -35,8 +35,24 @@ use Throwable;
  * {@see QueryDigest} before anything is kept, because a binding is a payer's
  * name or email and this output reaches a report file and a terminal.
  */
-final readonly class PageMeasurer
+/*
+ * NOT `readonly`, and Rector will try to make it so again.
+ *
+ * It holds a mutable query buffer on purpose — see `listenOnce()`. A readonly
+ * class cannot, which is how the buffer came to be a fresh closure capture per
+ * request and how the whole command came to die of memory exhaustion.
+ */
+final class PageMeasurer
 {
+    /**
+     * Queries seen since the buffer was last cleared.
+     *
+     * @var list<array{sql: string, bindings: string, ms: float, location: string|null}>
+     */
+    private array $records = [];
+
+    private bool $listening = false;
+
     public function __construct(
         private int $warmup = 1,
         private int $iterations = 5,
@@ -70,20 +86,43 @@ final readonly class PageMeasurer
         }
     }
 
-    private function once(string $path, LivewireProfile $profile): RequestMeasurement
+    /**
+     * Register the query listener EXACTLY ONCE per measurer.
+     *
+     * `DB::listen()` has no counterpart that removes a listener. Registering
+     * one per request looked harmless and was not: a full sweep is 26 pages by
+     * 6 runs, so the process finished with 156 live listeners, every one still
+     * appending to the array its own closure had captured. Growth is quadratic
+     * in queries, and the bare `perf:pages` died with
+     * `Allowed memory size of 134217728 bytes exhausted` while printing NOTHING
+     * and exiting 255 — a PHP memory fatal cannot be caught, so the only fix is
+     * not to reach it.
+     *
+     * One listener, one buffer, cleared per run.
+     */
+    private function listenOnce(): void
     {
-        $profile->reset();
+        if ($this->listening) {
+            return;
+        }
 
-        $records = [];
+        $this->listening = true;
 
-        DB::listen(function (QueryExecuted $query) use (&$records): void {
-            $records[] = [
+        DB::listen(function (QueryExecuted $query): void {
+            $this->records[] = [
                 'sql' => $query->sql,
                 'bindings' => (string) json_encode($query->bindings),
                 'ms' => $query->time,
                 'location' => $this->callSite(),
             ];
         });
+    }
+
+    private function once(string $path, LivewireProfile $profile): RequestMeasurement
+    {
+        $profile->reset();
+        $this->listenOnce();
+        $this->records = [];
 
         $started = hrtime(true);
         $response = $this->send($path);
@@ -95,7 +134,7 @@ final readonly class PageMeasurer
             $next = parse_url($location, PHP_URL_PATH);
 
             if (is_string($next) && $next !== '' && $next !== $path) {
-                $records = [];
+                $this->records = [];
                 $profile->reset();
                 $started = hrtime(true);
                 $response = $this->send($next);
@@ -110,7 +149,7 @@ final readonly class PageMeasurer
             status: $response->getStatusCode(),
             wallMs: $wallMs,
             livewireMs: $profile->livewireMs(),
-            queries: QueryDigest::of($records),
+            queries: QueryDigest::of($this->records),
             snapshots: SnapshotReader::read($html),
             components: $profile->timings(),
             bytes: strlen($html),
