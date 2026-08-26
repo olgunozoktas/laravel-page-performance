@@ -257,6 +257,25 @@ php artisan perf:pages --json
 Exit codes: `0` measured · `2` nothing could be measured, which is **not** a
 pass · non-zero on bad usage.
 
+## The agent skill
+
+The repository ships a skill at `.claude/skills/page-performance/SKILL.md`. Copy
+it into a project so an agent working there knows how to read the output, which
+findings are safe to act on, and — the part that matters — the two that are
+dangerous to "fix":
+
+```bash
+mkdir -p .claude/skills
+cp -R vendor/olgunozoktas/laravel-page-performance/.claude/skills/page-performance .claude/skills/
+```
+
+It carries the measured lessons rather than the API: that a navigation memo
+saved 0.002 ms, that a 280 KB page ships as 30 KB, that removing `no-store` from
+a page with a session token publishes one visitor's CSRF token to the next, and
+that `Livewire::test()` on a `#[Lazy]` component renders the placeholder — so an
+authorization test written the obvious way asserts 403, gets 200, and protects
+nothing.
+
 ## Tests
 
 ```bash
