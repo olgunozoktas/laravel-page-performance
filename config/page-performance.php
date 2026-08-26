@@ -48,6 +48,18 @@ return [
     'editor' => env('PAGE_PERFORMANCE_EDITOR', 'phpstorm'),
 
     /*
+     * Whether to emit clickable-link escapes at all.
+     *
+     * `auto` checks TERM_PROGRAM against the terminals known to render OSC 8.
+     * macOS Terminal.app is NOT one of them — it renders the escape as nothing,
+     * so a report that emitted them anyway told the reader a column was
+     * clickable when it was not. Use `--open=N` there instead.
+     *
+     * auto · always · never
+     */
+    'hyperlinks' => env('PAGE_PERFORMANCE_HYPERLINKS', 'auto'),
+
+    /*
      * Ceilings the host's own test asserts. DETERMINISTIC COUNTERS ONLY —
      * never a millisecond, which changes on every machine and every run.
      *

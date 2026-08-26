@@ -39,6 +39,7 @@ final class MeasurePages extends Command
         {--repeat=5 : Timed iterations per page; the first is always discarded}
         {--only= : Substring filter on the route name}
         {--shuffle : Randomise page order, so an ordering effect becomes visible}
+        {--open= : Open finding N in the configured editor (for terminals with no clickable links)}
         {--json : Machine-readable report}';
 
     protected $description = 'Measure every parameterless GET page and report what it costs, worst first';
@@ -176,11 +177,57 @@ final class MeasurePages extends Command
             $this->table(PageReport::FINDING_COLUMNS, $characteristics);
         }
 
-        if (! $this->supportsHyperlinks()) {
+        $this->components->info(EditorLink::explain(
+            EditorLink::terminalRenders() && $this->supportsHyperlinks(),
+            config()->string('page-performance.editor', ''),
+        ));
+
+        $this->openRequestedFinding($report, $links, [...$findings, ...$characteristics]);
+    }
+
+    /**
+     * `--open=N` — for the terminals that cannot make a link clickable.
+     *
+     * macOS Terminal.app is the common one: it renders OSC 8 as nothing at all,
+     * so a report that only emitted escapes handed those users a column they
+     * could look at and not use.
+     *
+     * @param  list<array<int, string>>  $rows
+     */
+    private function openRequestedFinding(PageReport $report, EditorLink $links, array $rows): void
+    {
+        $which = $this->option('open');
+
+        if (! is_string($which) || $which === '') {
             return;
         }
 
-        $this->components->info('The `where` column is clickable. Set page-performance.editor to change which editor opens.');
+        $index = (int) $which;
+        $locations = $report->locations();
+
+        if (! isset($locations[$index])) {
+            $this->components->error(sprintf('No finding numbered %d has a location to open.', $index));
+
+            return;
+        }
+
+        $url = $links->urlFor($locations[$index]);
+
+        if ($url === null) {
+            $this->components->error('No editor is configured. Set page-performance.editor.');
+
+            return;
+        }
+
+        // `open` is macOS; `xdg-open` elsewhere. Neither is required for the
+        // report itself, so a missing one is a warning and not a failure.
+        $opener = PHP_OS_FAMILY === 'Darwin' ? 'open' : 'xdg-open';
+
+        exec(sprintf('%s %s 2>/dev/null', $opener, escapeshellarg($url)), $ignored, $status);
+
+        $status === 0
+            ? $this->components->info(sprintf('Opened %s', $locations[$index]))
+            : $this->components->warn(sprintf('Could not open it. The location is %s', $locations[$index]));
     }
 
     /**

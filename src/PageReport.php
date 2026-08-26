@@ -303,6 +303,33 @@ final readonly class PageReport
         return $found;
     }
 
+    /**
+     * Finding number => its location, for `--open=N`.
+     *
+     * Numbered exactly as the two tables print them, so the number a reader
+     * types is the number they are looking at.
+     *
+     * @return array<int, string>
+     */
+    public function locations(): array
+    {
+        $plain = new EditorLink(null, '', false);
+        $found = [];
+        $n = 0;
+
+        foreach ([$this->findingRows($plain), $this->characteristicRows($plain)] as $table) {
+            foreach ($table as $row) {
+                $n++;
+
+                if ($row[4] !== '—' && $row[4] !== 'location unknown') {
+                    $found[$n] = $row[4];
+                }
+            }
+        }
+
+        return $found;
+    }
+
     /** Nothing measured is NOT a pass — the command turns this into exit 2. */
     public function everythingMeasured(): bool
     {
