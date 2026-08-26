@@ -73,7 +73,7 @@ Every label has a stated rule, so it can be argued with.
 | `payload-heavy` | response ≥ 100 KB **compressed** |
 | `snapshot-heavy` | snapshot ≥ 4 KB, or ≥ 3% of the page |
 | `vendor-bound` | outbound HTTP was made **inside the render** |
-| `uncacheable` | Livewire set `no-store`, so no CDN or browser may hold this page |
+| `uncacheable` | `no-store` on a page that mounts a component — and it says whether a per-session token makes the page uncacheable **anyway** |
 | `query-heavy` | over the page's query budget |
 | `unbudgeted` | no budget and no stated reason for not having one |
 | `ok` | none of the above — **printed with its numbers**, because a healthy row and an unmeasured row must not look the same |
@@ -203,10 +203,15 @@ silence is not.
 
 **Pages that no cache may hold.** Livewire's `SupportDisablingBackButtonCache`
 sets `Cache-Control: no-store` on **every** page that mounts a component. That is
-right behind a login and quietly expensive on a public one: a marketing or
-landing page you wanted a CDN to hold is uncacheable because it carries a single
-component. `uncacheable` reports it, and needs no instrumentation — it reads the
-response header.
+right behind a login and quietly expensive on a public one: a landing page you
+wanted a CDN to hold is uncacheable because it carries a single component.
+
+**The finding names the real blocker, not just the cause — and that distinction
+is a security one.** Saying only "Livewire set no-store" invites removing the
+header and putting the page behind a CDN. Measured on a real board home page,
+that would have served one visitor's CSRF token, session cookie and Livewire
+snapshot checksum to the next visitor. So the row says whether the page carries
+per-session state, and only a page carrying none is worth questioning.
 
 ## Honest limits
 

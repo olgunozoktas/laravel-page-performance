@@ -178,3 +178,23 @@ it('emits NO escape codes when the output is not a terminal', function (): void 
         ->doesntExpectOutputToContain("\e]8;;")
         ->assertSuccessful();
 });
+
+it('names the per-session token as the real reason a page cannot be shared-cached', function (): void {
+    /*
+     * The finding used to say only "Livewire set no-store", which invites
+     * removing the header and putting the page behind a CDN. On a real board
+     * home page that would have served one visitor's CSRF token, session cookie
+     * and Livewire snapshot checksum to the next visitor.
+     *
+     * A finding that names a cause but not the blocker gets fixed the wrong
+     * way, and this one would have been fixed into a vulnerability.
+     */
+    Route::get('/tokened', fn () => response(
+        '<html><head><meta name="csrf-token" content="abc"></head>'
+        .'<body><div wire:snapshot="{&quot;memo&quot;:{&quot;id&quot;:&quot;a&quot;,&quot;name&quot;:&quot;x&quot;}}"></div></body></html>'
+    )->header('Cache-Control', 'no-store, private'))->name('t.tokened');
+
+    $this->artisan('perf:pages', ['--only' => 't.tokened', '--repeat' => 1])
+        ->expectsOutputToContain('per-session token')
+        ->assertSuccessful();
+});

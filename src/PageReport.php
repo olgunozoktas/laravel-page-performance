@@ -210,7 +210,11 @@ final readonly class PageReport
         if (in_array('uncacheable', $labels, true)) {
             $found[] = [
                 'finding' => 'uncacheable',
-                'evidence' => 'Livewire set no-store, so no CDN or browser may hold this page',
+                'evidence' => $run->carriesPerSessionState()
+                    // The important half. Removing the header would publish one
+                    // visitor's token to the next.
+                    ? 'no-store — and this page carries a per-session token, so it could NOT be shared-cached anyway'
+                    : 'Livewire set no-store; nothing per-session is on the page, so this one is worth questioning',
                 'where' => '',
             ];
         }

@@ -93,6 +93,27 @@ final readonly class RequestMeasurement
         return $this->snapshots->count() > 0 && str_contains($this->cacheControl, 'no-store');
     }
 
+    /**
+     * Whether this page could be shared-cached AT ALL, Livewire aside.
+     *
+     * THIS EXISTS BECAUSE THE FINDING WAS DANGEROUS WITHOUT IT. Reporting
+     * "Livewire set no-store" invites somebody to remove the header and put the
+     * page behind a CDN — and on a real board home page that would have served
+     * one visitor's CSRF token, session cookie and Livewire snapshot checksum
+     * to the next visitor. A finding that names a cause and not the blocker is
+     * a finding that gets fixed the wrong way.
+     *
+     * A page carrying a per-session token cannot be shared-cached whatever
+     * Livewire does. Saying so turns "this is uncacheable" from a defect into a
+     * fact about the page.
+     */
+    public function carriesPerSessionState(): bool
+    {
+        return str_contains($this->html, 'csrf-token')
+            || str_contains($this->html, 'name="_token"')
+            || str_contains($this->html, 'wire:snapshot');
+    }
+
     public function diagnosis(?int $queryBudget, bool $budgetsApply = true): PageDiagnosis
     {
         return new PageDiagnosis(
