@@ -1,0 +1,61 @@
+{
+    "name": "olgunozoktas/laravel-page-performance",
+    "description": "Measure what every Laravel page actually costs, and say what to fix. Warms the process, reports the MEDIAN of N in-process requests, and gives each page a diagnosis — repeated queries with the file:line that ran them, database share, response bytes, and per-component Livewire timing and snapshot payload when Livewire is installed. Milliseconds are reported; only the deterministic counters gate.",
+    "keywords": ["laravel", "livewire", "performance", "latency", "n+1", "profiling", "budget"],
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Olgun Özoktaş",
+            "email": "olgunozoktas@hotmail.com"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "laravel/framework": "^12.0|^13.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.18",
+        "livewire/livewire": "^4.0",
+        "orchestra/testbench": "^10.0|^11.0",
+        "pestphp/pest": "^4.0",
+        "pestphp/pest-plugin-laravel": "^4.0"
+    },
+    "suggest": {
+        "livewire/livewire": "Adds per-component render timing and snapshot payload bytes to every page row."
+    },
+    "autoload": {
+        "psr-4": {
+            "Olgun\\PagePerformance\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Olgun\\PagePerformance\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Olgun\\PagePerformance\\PagePerformanceServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "scripts": {
+        "lint": ["@php vendor/bin/pint"],
+        "test": [
+            "@php vendor/bin/pint --test",
+            "@php vendor/bin/phpstan analyse --no-progress",
+            "@php vendor/bin/pest"
+        ]
+    }
+}
