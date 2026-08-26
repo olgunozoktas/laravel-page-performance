@@ -99,82 +99,168 @@ final readonly class PageReport
         }, $sorted);
     }
 
-    public const array FINDING_COLUMNS = ['#', 'page', 'finding', 'evidence', 'where'];
+    public const array FINDING_COLUMNS = ['#', 'pages', 'finding', 'evidence', 'where'];
 
     /**
-     * EVERY finding, one per row, worst page first.
+     * Every finding, GROUPED, worst page first.
      *
-     * A row per FINDING rather than a paragraph per page, because the question
-     * being asked is "what is there to fix" and the answer is a list. The
-     * `where` column is a clickable link wherever the terminal and the
-     * configured editor both support it, and plain text everywhere else.
+     * ONE DEFECT IS ONE ROW, however many pages carry it. A real sweep produced
+     * 77 rows, and 28 of them were the same table-existence check from the same
+     * line of the same shared-data class — one defect, printed once per page,
+     * burying the six that were distinct. A report you have to de-duplicate by
+     * eye is a report that gets skimmed.
+     *
+     * Grouping is by finding, evidence and location together, so two pages
+     * repeating DIFFERENT queries stay two rows.
      *
      * @return list<array<int, string>>
      */
     public function findingRows(EditorLink $links): array
     {
-        $rows = [];
-        $n = 0;
+        $groups = [];
 
         foreach ($this->sorted() as $result) {
-            $run = $result->representative();
+            foreach ($this->findingsFor($result) as $finding) {
+                $key = $finding['finding'].'|'.$finding['evidence'].'|'.$finding['where'];
 
-            if (! $run instanceof RequestMeasurement || $result->diagnosis()->isOk()) {
-                continue;
-            }
-
-            $page = $result->route->name;
-            $labels = $result->diagnosis()->labels();
-
-            foreach ($run->queries->repeated() as $repeat) {
-                $rows[] = [(string) ++$n, $page, 'repeated-query',
-                    sprintf('x%d %s', $repeat['runs'], mb_strimwidth($repeat['sql'], 0, 58, '…')),
-                    $links->render($repeat['location'])];
-            }
-
-            foreach ($run->queries->nPlusOne() as $loop) {
-                $rows[] = [(string) ++$n, $page, 'n-plus-one',
-                    sprintf('%d distinct bindings · %s', $loop['distinct_bindings'], mb_strimwidth($loop['sql'], 0, 44, '…')),
-                    $links->render($loop['location'])];
-            }
-
-            if (in_array('db-bound', $labels, true)) {
-                $slowest = $run->queries->slowest();
-                $rows[] = [(string) ++$n, $page, 'db-bound',
-                    sprintf('%.1f ms of %.1f ms in the database', $run->dbMs(), $run->wallMs),
-                    $links->render($slowest['location'] ?? null)];
-            }
-
-            if (in_array('livewire-bound', $labels, true)) {
-                $rows[] = [(string) ++$n, $page, 'livewire-bound',
-                    sprintf('%.1f ms of %.1f ms in Livewire', $run->livewireMs, $run->wallMs), '—'];
-            }
-
-            foreach ($run->components as $component) {
-                if ($component->isChildHeavy()) {
-                    $rows[] = [(string) ++$n, $page, 'child-heavy',
-                        sprintf('%s: %.1f ms of its %.1f ms render is a child', $component->name, $component->childMs(), $component->renderMs()), '—'];
-                }
-            }
-
-            if (in_array('payload-heavy', $labels, true) || in_array('oversized-html', $labels, true)) {
-                $rows[] = [(string) ++$n, $page, 'payload-heavy', sprintf('%s of HTML', $this->kb($run->bytes)), '—'];
-            }
-
-            $heaviest = $run->snapshots->heaviest();
-
-            if (in_array('snapshot-heavy', $labels, true) && $heaviest !== null) {
-                $rows[] = [(string) ++$n, $page, 'snapshot-heavy',
-                    sprintf('%s carries %s, sent up AND back per interaction', $heaviest['name'], $this->kb($heaviest['bytes'])), '—'];
-            }
-
-            if ($result->spreadPercent() >= 25.0) {
-                $rows[] = [(string) ++$n, $page, 'noisy-measurement',
-                    sprintf('%.0f%% spread — this row\'s position is not trustworthy', $result->spreadPercent()), '—'];
+                $groups[$key] ??= [...$finding, 'pages' => []];
+                $groups[$key]['pages'][] = $result->route->name;
             }
         }
 
+        $rows = [];
+        $n = 0;
+
+        foreach ($groups as $group) {
+            $pages = $group['pages'];
+
+            $rows[] = [
+                (string) ++$n,
+                count($pages) === 1 ? $pages[0] : sprintf('%d pages', count($pages)),
+                $group['finding'],
+                $group['evidence'],
+                $links->render($group['where'] === '' ? null : $group['where']),
+            ];
+        }
+
         return $rows;
+    }
+
+    /**
+     * The pages behind a grouped finding, for `--json` and for anyone who needs
+     * the list rather than the count.
+     *
+     * @return array<string, list<string>>
+     */
+    public function findingPages(): array
+    {
+        $groups = [];
+
+        foreach ($this->sorted() as $result) {
+            foreach ($this->findingsFor($result) as $finding) {
+                $groups[$finding['finding'].' · '.$finding['evidence']][] = $result->route->name;
+            }
+        }
+
+        return $groups;
+    }
+
+    /**
+     * @return list<array{finding: string, evidence: string, where: string}>
+     */
+    private function findingsFor(PageResult $result): array
+    {
+        $run = $result->representative();
+
+        if (! $run instanceof RequestMeasurement || $result->diagnosis()->isOk()) {
+            return [];
+        }
+
+        $labels = $result->diagnosis()->labels();
+        $found = [];
+
+        foreach ($run->queries->repeated() as $repeat) {
+            $found[] = [
+                'finding' => 'repeated-query',
+                'evidence' => sprintf('x%d %s', $repeat['runs'], mb_strimwidth($repeat['sql'], 0, 58, '…')),
+                'where' => $repeat['location'] ?? '',
+            ];
+        }
+
+        foreach ($run->queries->nPlusOne() as $loop) {
+            $found[] = [
+                'finding' => 'n-plus-one',
+                'evidence' => sprintf('%d distinct bindings · %s', $loop['distinct_bindings'], mb_strimwidth($loop['sql'], 0, 44, '…')),
+                'where' => $loop['location'] ?? '',
+            ];
+        }
+
+        if (in_array('vendor-bound', $labels, true)) {
+            $found[] = [
+                'finding' => 'vendor-bound',
+                'evidence' => sprintf('outbound HTTP inside the render — %s', $run->outbound->summary()),
+                'where' => '',
+            ];
+        }
+
+        if (in_array('uncacheable', $labels, true)) {
+            $found[] = [
+                'finding' => 'uncacheable',
+                'evidence' => 'Livewire set no-store, so no CDN or browser may hold this page',
+                'where' => '',
+            ];
+        }
+
+        if (in_array('db-bound', $labels, true)) {
+            $slowest = $run->queries->slowest();
+            $found[] = [
+                'finding' => 'db-bound',
+                'evidence' => sprintf('%.0f%% of the request is the database · slowest %.1f ms', $run->dbMs() / max($run->wallMs, 0.01) * 100, $slowest['ms'] ?? 0.0),
+                'where' => $slowest['location'] ?? '',
+            ];
+        }
+
+        if (in_array('livewire-bound', $labels, true)) {
+            $found[] = [
+                'finding' => 'livewire-bound',
+                'evidence' => sprintf('%.0f%% of the request is Livewire', $run->livewireMs / max($run->wallMs, 0.01) * 100),
+                'where' => '',
+            ];
+        }
+
+        foreach ($run->components as $component) {
+            if ($component->isChildHeavy()) {
+                $found[] = [
+                    'finding' => 'child-heavy',
+                    'evidence' => sprintf('%s: %.0f%% of its render is one child', $component->name, $component->childMs() / max($component->renderMs(), 0.01) * 100),
+                    'where' => '',
+                ];
+            }
+        }
+
+        if (in_array('payload-heavy', $labels, true) || in_array('oversized-html', $labels, true)) {
+            $found[] = ['finding' => 'payload-heavy', 'evidence' => sprintf('%s of HTML', $this->kb($run->bytes)), 'where' => ''];
+        }
+
+        $heaviest = $run->snapshots->heaviest();
+
+        if (in_array('snapshot-heavy', $labels, true) && $heaviest !== null) {
+            $found[] = [
+                'finding' => 'snapshot-heavy',
+                'evidence' => sprintf('%s carries %s, sent up AND back per interaction', $heaviest['name'], $this->kb($heaviest['bytes'])),
+                'where' => '',
+            ];
+        }
+
+        if ($result->isNoisy()) {
+            $found[] = [
+                'finding' => 'noisy-measurement',
+                'evidence' => sprintf('%.0f%% spread — this row\'s position is not trustworthy', $result->spreadPercent()),
+                'where' => '',
+            ];
+        }
+
+        return $found;
     }
 
     /** Nothing measured is NOT a pass — the command turns this into exit 2. */
@@ -200,6 +286,7 @@ final readonly class PageReport
             'rows' => $this->rows(),
             'finding_columns' => self::FINDING_COLUMNS,
             'findings' => $this->findingRows(new EditorLink(null, '', false)),
+            'finding_pages' => $this->findingPages(),
             'skipped' => array_map(static fn (MeasurableRoute $r): array => ['route' => $r->name, 'reason' => $r->skipReason], $this->skipped),
         ];
     }

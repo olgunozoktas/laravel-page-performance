@@ -1,7 +1,15 @@
 {
     "name": "olgunozoktas/laravel-page-performance",
     "description": "Measure what every Laravel page actually costs, and say what to fix. Warms the process, reports the MEDIAN of N in-process requests, and gives each page a diagnosis — repeated queries with the file:line that ran them, database share, response bytes, and per-component Livewire timing and snapshot payload when Livewire is installed. Milliseconds are reported; only the deterministic counters gate.",
-    "keywords": ["laravel", "livewire", "performance", "latency", "n+1", "profiling", "budget"],
+    "keywords": [
+        "laravel",
+        "livewire",
+        "performance",
+        "latency",
+        "n+1",
+        "profiling",
+        "budget"
+    ],
     "type": "library",
     "license": "MIT",
     "authors": [
@@ -51,10 +59,12 @@
     "minimum-stability": "stable",
     "prefer-stable": true,
     "scripts": {
-        "lint": ["@php vendor/bin/pint"],
+        "lint": [
+            "@php vendor/bin/pint"
+        ],
         "test": [
             "@php vendor/bin/pint --test",
-            "@php vendor/bin/phpstan analyse --no-progress",
+            "@php vendor/bin/phpstan analyse --no-progress --memory-limit=1G",
             "@php vendor/bin/pest"
         ]
     }

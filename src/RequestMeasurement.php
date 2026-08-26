@@ -20,6 +20,8 @@ final readonly class RequestMeasurement
         public SnapshotReader $snapshots,
         public array $components,
         public int $bytes,
+        public OutboundCalls $outbound = new OutboundCalls,
+        public string $cacheControl = '',
     ) {}
 
     public function dbMs(): float
@@ -45,6 +47,24 @@ final readonly class RequestMeasurement
         return array_any($this->components, fn (ComponentTiming $component): bool => $component->isChildHeavy());
     }
 
+    /**
+     * Whether this response told every cache to keep nothing.
+     *
+     * Livewire's `SupportDisablingBackButtonCache` runs on EVERY component boot
+     * and sets `no-store`. That is right for a page behind a login and quietly
+     * expensive for one that is not: a marketing or board page you wanted a CDN
+     * to hold is uncacheable because it mounts one component. Verified on a real
+     * public home page, which carried `no-store, private` for exactly that
+     * reason.
+     *
+     * Only worth saying when a component is actually on the page — a `no-store`
+     * an application set on purpose is a decision, not a finding.
+     */
+    public function isUncacheable(): bool
+    {
+        return $this->snapshots->count() > 0 && str_contains($this->cacheControl, 'no-store');
+    }
+
     public function diagnosis(?int $queryBudget, bool $budgetsApply = true): PageDiagnosis
     {
         return new PageDiagnosis(
@@ -57,7 +77,8 @@ final readonly class RequestMeasurement
             responseBytes: $this->bytes,
             snapshotBytes: $this->snapshots->totalBytes(),
             hasChildHeavyComponent: $this->hasChildHeavyComponent(),
-            outboundCalls: 0,
+            outboundCalls: $this->outbound->count(),
+            uncacheable: $this->isUncacheable(),
             queryBudget: $queryBudget,
             budgetsApply: $budgetsApply,
         );

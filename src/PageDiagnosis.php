@@ -45,6 +45,17 @@ final readonly class PageDiagnosis
     private const float DB_BOUND_RATIO = 0.50;
 
     /**
+     * Below this, a share is arithmetic rather than a finding.
+     *
+     * Measured on a real sweep: a 1.8 ms page reported `db-bound` because 0.9 ms
+     * of it was a settings lookup in middleware. True, and useless — there is
+     * nothing to fix on a page that answers in under two milliseconds. Every
+     * ratio label carries this floor now, so the labels describe pages somebody
+     * would actually open.
+     */
+    private const float MATERIAL_MS = 5.0;
+
+    /**
      * Livewire taking this share of a request is the cost the advice warns about.
      *
      * This replaced a `render-bound` rule that asked the OPPOSITE question —
@@ -76,6 +87,7 @@ final readonly class PageDiagnosis
         public int $snapshotBytes,
         public bool $hasChildHeavyComponent,
         public int $outboundCalls,
+        public bool $uncacheable,
         public ?int $queryBudget,
         /*
          * Whether a budget verdict means anything for this measurement.
@@ -115,11 +127,15 @@ final readonly class PageDiagnosis
             $labels[] = 'vendor-bound';
         }
 
-        if ($this->ratioOfWall($this->dbMs) >= self::DB_BOUND_RATIO) {
+        if ($this->uncacheable) {
+            $labels[] = 'uncacheable';
+        }
+
+        if ($this->dbMs >= self::MATERIAL_MS && $this->ratioOfWall($this->dbMs) >= self::DB_BOUND_RATIO) {
             $labels[] = 'db-bound';
         }
 
-        if ($this->ratioOfWall($this->livewireMs) >= self::LIVEWIRE_BOUND_RATIO) {
+        if ($this->livewireMs >= self::MATERIAL_MS && $this->ratioOfWall($this->livewireMs) >= self::LIVEWIRE_BOUND_RATIO) {
             $labels[] = 'livewire-bound';
         }
 

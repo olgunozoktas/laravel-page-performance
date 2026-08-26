@@ -27,6 +27,7 @@ function diagnosis(mixed ...$overrides): PageDiagnosis
         'snapshotBytes' => 500,
         'hasChildHeavyComponent' => false,
         'outboundCalls' => 0,
+        'uncacheable' => false,
         'queryBudget' => 10,
         'budgetsApply' => true,
     ];
@@ -138,4 +139,35 @@ it('survives a page that took no measurable time', function (): void {
 
     expect($instant->labels())->not->toContain('db-bound')
         ->and($instant->labels())->not->toContain('render-bound');
+});
+
+it('reports a page no cache may hold', function (): void {
+    /*
+     * Livewire's SupportDisablingBackButtonCache sets `no-store` on EVERY page
+     * that mounts a component. Correct behind a login; quietly expensive on a
+     * public page, which is then uncacheable by any CDN because it happens to
+     * carry one component. Verified on a real public home page.
+     */
+    expect(diagnosis(uncacheable: true)->labels())->toContain('uncacheable');
+});
+
+it('reports outbound HTTP made inside a render', function (): void {
+    // The costliest thing a render can do, and the label was DEAD until now:
+    // outboundCalls was hardcoded to 0, so it could never fire.
+    expect(diagnosis(outboundCalls: 2)->labels())->toContain('vendor-bound');
+});
+
+it('does NOT call a trivially fast page database-bound', function (): void {
+    /*
+     * A real sweep flagged a 1.8 ms page because 0.9 ms of it was a settings
+     * lookup in middleware. True, and nothing anybody would act on. Ratio labels
+     * need an absolute floor or they describe arithmetic rather than a problem.
+     */
+    expect(diagnosis(wallMs: 1.8, dbMs: 0.9)->labels())->not->toContain('db-bound')
+        ->and(diagnosis(wallMs: 60.0, dbMs: 35.0)->labels())->toContain('db-bound');
+});
+
+it('does NOT call a trivially fast page livewire-bound either', function (): void {
+    expect(diagnosis(wallMs: 8.0, livewireMs: 4.0)->labels())->not->toContain('livewire-bound')
+        ->and(diagnosis(wallMs: 40.0, livewireMs: 20.0)->labels())->toContain('livewire-bound');
 });

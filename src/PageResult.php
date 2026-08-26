@@ -75,6 +75,29 @@ final readonly class PageResult
      * Above about 25% the ranking is noise and the report says so rather than
      * presenting an order it cannot justify.
      */
+    /**
+     * Whether the disagreement between runs is worth saying out loud.
+     *
+     * A PERCENTAGE ALONE IS NOT A FINDING, and a real sweep proved it: 24 of 32
+     * pages were flagged, with spreads of 340%, 181% and 161% — all of them on
+     * pages answering in single-digit milliseconds, where the whole spread was a
+     * few milliseconds of ordinary machine jitter. A label that fires on
+     * three-quarters of the rows cannot be told from a broken one.
+     *
+     * So it needs BOTH: a wide relative spread and an absolute gap big enough to
+     * change where a page sits in the ranking.
+     */
+    public function isNoisy(): bool
+    {
+        if ($this->runs === []) {
+            return false;
+        }
+
+        $times = array_map(static fn (RequestMeasurement $m): float => $m->wallMs, $this->runs);
+
+        return $this->spreadPercent() >= 40.0 && (max($times) - min($times)) >= 15.0;
+    }
+
     public function spreadPercent(): float
     {
         if ($this->runs === []) {
@@ -102,6 +125,22 @@ final readonly class PageResult
 
         return $representative instanceof RequestMeasurement
             ? $representative->diagnosis(null, budgetsApply: false)
-            : new PageDiagnosis(0, 0, 0, 0, 0, 0, 0, 0, false, 0, null, false);
+            // Named, not positional: this list grows, and a bool landing in an
+            // int slot is the kind of drift a compiler cannot always catch.
+            : new PageDiagnosis(
+                wallMs: 0,
+                dbMs: 0,
+                livewireMs: 0,
+                queries: 0,
+                avoidableExecutions: 0,
+                nPlusOneShapes: 0,
+                responseBytes: 0,
+                snapshotBytes: 0,
+                hasChildHeavyComponent: false,
+                outboundCalls: 0,
+                uncacheable: false,
+                queryBudget: null,
+                budgetsApply: false,
+            );
     }
 }

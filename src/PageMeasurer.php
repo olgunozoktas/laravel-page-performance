@@ -8,10 +8,12 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Contracts\Session\Session;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Http\Client\Events\RequestSending;
 use Illuminate\Http\Request;
 use Illuminate\Session\SessionManager;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\Response;
@@ -53,6 +55,8 @@ final class PageMeasurer
 
     private bool $listening = false;
 
+    private OutboundCalls $outbound;
+
     public function __construct(
         private int $warmup = 1,
         private int $iterations = 5,
@@ -61,6 +65,8 @@ final class PageMeasurer
 
     public function measure(MeasurableRoute $route): PageResult
     {
+        $this->outbound ??= new OutboundCalls;
+
         $profile = new LivewireProfile;
         $profile->subscribe();
 
@@ -108,6 +114,19 @@ final class PageMeasurer
 
         $this->listening = true;
 
+        /*
+         * Outbound HTTP, on the same once-only terms and for the same reason.
+         *
+         * This is the costliest thing a render can do: a query is as slow as
+         * your database, a third party's API is as slow as somebody else's
+         * afternoon. Only Laravel's own client is visible here — a raw curl
+         * handle or a vendor SDK with its own Guzzle goes unseen, so the label
+         * firing is proof and its silence is not.
+         */
+        Event::listen(RequestSending::class, function (RequestSending $event): void {
+            $this->outbound->record($event->request->url());
+        });
+
         DB::listen(function (QueryExecuted $query): void {
             $this->records[] = [
                 'sql' => $query->sql,
@@ -123,6 +142,7 @@ final class PageMeasurer
         $profile->reset();
         $this->listenOnce();
         $this->records = [];
+        $this->outbound->reset();
 
         $started = hrtime(true);
         $response = $this->send($path);
@@ -153,6 +173,8 @@ final class PageMeasurer
             snapshots: SnapshotReader::read($html),
             components: $profile->timings(),
             bytes: strlen($html),
+            outbound: $this->outbound,
+            cacheControl: (string) $response->headers->get('Cache-Control'),
         );
     }
 
