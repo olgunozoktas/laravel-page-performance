@@ -25,10 +25,22 @@ what to open. Every finding here ends in a file and a line.
 
 ## Install
 
+**Not on Packagist yet.** Add the repository, then require it:
+
+```jsonc
+// composer.json
+"repositories": [
+    { "type": "vcs", "url": "https://github.com/olgunozoktas/laravel-page-performance" }
+]
+```
+
 ```bash
-composer require --dev olgunozoktas/laravel-page-performance
+composer require --dev olgunozoktas/laravel-page-performance:^0.1
 php artisan vendor:publish --tag=page-performance-config
 ```
+
+Once it is listed on Packagist the `repositories` entry becomes unnecessary and
+`composer require --dev olgunozoktas/laravel-page-performance` is enough.
 
 Livewire is **optional**. Without it you get every page-level number; with it you
 also get per-component render timing and snapshot payload bytes.
