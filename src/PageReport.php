@@ -118,10 +118,37 @@ final readonly class PageReport
      */
     public function findingRows(EditorLink $links): array
     {
+        return $this->rowsFor($links, true);
+    }
+
+    /**
+     * Where the time goes, and where a measurement should not be trusted.
+     *
+     * NOT defects, and kept apart from them for a reason: a board with every
+     * duplicate query fixed still had five rows, none of which anybody should
+     * act on. A findings count that cannot reach zero is a count people stop
+     * reading.
+     *
+     * @return list<array<int, string>>
+     */
+    public function characteristicRows(EditorLink $links): array
+    {
+        return $this->rowsFor($links, false);
+    }
+
+    /**
+     * @return list<array<int, string>>
+     */
+    private function rowsFor(EditorLink $links, bool $defectsOnly): array
+    {
         $groups = [];
 
         foreach ($this->sorted() as $result) {
             foreach ($this->findingsFor($result) as $finding) {
+                if (in_array($finding['finding'], PageDiagnosis::DEFECTS, true) !== $defectsOnly) {
+                    continue;
+                }
+
                 $key = $finding['finding'].'|'.$finding['evidence'].'|'.$finding['where'];
 
                 $groups[$key] ??= [...$finding, 'pages' => []];
@@ -181,6 +208,7 @@ final readonly class PageReport
         }
 
         $labels = $result->diagnosis()->labels();
+        $defects = PageDiagnosis::DEFECTS;
         $found = [];
 
         foreach ($run->queries->repeated() as $repeat) {

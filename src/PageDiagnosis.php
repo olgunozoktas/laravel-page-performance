@@ -170,9 +170,54 @@ final readonly class PageDiagnosis
         return $labels === [] ? ['ok'] : $labels;
     }
 
+    /**
+     * The labels that mean SOMETHING IS WRONG AND YOU CAN FIX IT.
+     *
+     * The others — `db-bound`, `livewire-bound`, `uncacheable` on a page that
+     * carries a per-session token — describe where a request spends itself.
+     * They are worth printing and they are not defects, and mixing the two was
+     * making the report unreadable: a board with every duplicate query fixed
+     * still showed five "findings", none of which anybody should act on. A
+     * reader who cannot reach zero stops reading the number.
+     *
+     * @var list<string>
+     */
+    public const array DEFECTS = [
+        'repeated-query',
+        'n-plus-one',
+        'query-heavy',
+        'vendor-bound',
+        'payload-heavy',
+        'oversized-html',
+        'snapshot-heavy',
+        'child-heavy',
+        'unbudgeted',
+    ];
+
     public function isOk(): bool
     {
         return $this->labels() === ['ok'];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function defects(): array
+    {
+        return array_values(array_intersect($this->labels(), self::DEFECTS));
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function characteristics(): array
+    {
+        return array_values(array_diff($this->labels(), [...self::DEFECTS, 'ok']));
+    }
+
+    public function hasDefect(): bool
+    {
+        return $this->defects() !== [];
     }
 
     public function status(): string

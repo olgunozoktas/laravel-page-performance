@@ -159,10 +159,25 @@ it('finds no duration keys in an honest budget', function (): void {
     expect(Budgets::durationKeys())->toBeEmpty();
 });
 
-it('prints findings as a TABLE, one row per finding', function (): void {
+it('prints defects as a TABLE, one row per defect', function (): void {
     $this->artisan('perf:pages', ['--only' => 't.repeats', '--repeat' => 1])
-        ->expectsOutputToContain('Findings')
+        ->expectsOutputToContain('Defects')
         ->expectsOutputToContain('where')
+        ->assertSuccessful();
+});
+
+it('keeps CHARACTERISTICS apart from defects', function (): void {
+    /*
+     * A board with every duplicate query fixed still showed five "findings" —
+     * where the time went, and two rows whose spread said the measurement was
+     * not trustworthy. None of them was worth acting on, and a count that
+     * cannot reach zero is a count people stop reading.
+     *
+     * A plain page has neither, and must say so rather than printing an empty
+     * table.
+     */
+    $this->artisan('perf:pages', ['--only' => 't.plain', '--repeat' => 1])
+        ->expectsOutputToContain('No defects')
         ->assertSuccessful();
 });
 

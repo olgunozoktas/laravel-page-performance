@@ -153,19 +153,28 @@ final class MeasurePages extends Command
 
         $links = EditorLink::fromConfig($this->supportsHyperlinks());
         $findings = $report->findingRows($links);
-
-        if ($findings === []) {
-            $this->components->info('Every page measured is ok. Nothing to act on.');
-
-            return;
-        }
+        $characteristics = $report->characteristicRows($links);
 
         $this->newLine();
-        $this->components->twoColumnDetail(
-            '<options=bold>Findings</>',
-            sprintf('%d, worst page first', count($findings)),
-        );
-        $this->table(PageReport::FINDING_COLUMNS, $findings);
+
+        if ($findings === []) {
+            $this->components->info('No defects. Nothing on these pages is worth fixing.');
+        } else {
+            $this->components->twoColumnDetail(
+                '<options=bold>Defects</>',
+                sprintf('%d — something is wrong and you can fix it', count($findings)),
+            );
+            $this->table(PageReport::FINDING_COLUMNS, $findings);
+        }
+
+        if ($characteristics !== []) {
+            $this->newLine();
+            $this->components->twoColumnDetail(
+                '<options=bold>Characteristics</>',
+                sprintf('%d — where the time goes. NOT defects.', count($characteristics)),
+            );
+            $this->table(PageReport::FINDING_COLUMNS, $characteristics);
+        }
 
         if (! $this->supportsHyperlinks()) {
             return;

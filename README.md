@@ -78,9 +78,24 @@ Every label has a stated rule, so it can be argued with.
 | `unbudgeted` | no budget and no stated reason for not having one |
 | `ok` | none of the above — **printed with its numbers**, because a healthy row and an unmeasured row must not look the same |
 
-## Findings are a table, and the locations are clickable
+## Defects and characteristics are separate, and only one of them should reach zero
 
-Under the summary comes one row per **finding**, not a paragraph per page:
+Under the summary come two tables, and the difference between them is the point.
+
+**Defects** are things that are wrong and that you can fix: a repeated query, an
+N+1, an outbound call inside a render, a page over its budget.
+
+**Characteristics** are where a request spends itself — `db-bound`,
+`livewire-bound`, a page that cannot be shared-cached because it carries a
+per-session token, a row whose spread says the measurement is not trustworthy.
+They are worth printing and they are not defects.
+
+Mixing them makes the number unusable. On one real board, every duplicate query
+was fixed and the report still showed five "findings", none of which anybody
+should act on — and a count that cannot reach zero is a count people stop
+reading.
+
+One row per defect, not a paragraph per page:
 
 ```
   Findings .............................................. 52, worst page first
