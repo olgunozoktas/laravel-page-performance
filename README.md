@@ -63,6 +63,40 @@ Every label has a stated rule, so it can be argued with.
 | `unbudgeted` | no budget and no stated reason for not having one |
 | `ok` | none of the above — **printed with its numbers**, because a healthy row and an unmeasured row must not look the same |
 
+## Findings are a table, and the locations are clickable
+
+Under the summary comes one row per **finding**, not a paragraph per page:
+
+```
+  Findings .............................................. 52, worst page first
++----+----------------------+-------------------+------------------------------------------+---------------------------------+
+| #  | page                 | finding           | evidence                                 | where                           |
++----+----------------------+-------------------+------------------------------------------+---------------------------------+
+| 1  | board.home           | repeated-query    | x2 select count(*) from "listings" …     | app/Boards/ReadsBoard.php:49    |
+| 3  | board.home           | livewire-bound    | 23.7 ms of 40.5 ms in Livewire           | —                               |
+| 4  | board.home           | payload-heavy     | 268K of HTML                             | —                               |
+| 7  | board.similar-boards | noisy-measurement | 41% spread — position not trustworthy    | —                               |
++----+----------------------+-------------------+------------------------------------------+---------------------------------+
+```
+
+The `where` column is an **OSC 8 hyperlink**. Click it and the file opens at the
+line.
+
+```php
+// config/page-performance.php
+'editor' => env('PAGE_PERFORMANCE_EDITOR', 'phpstorm'),
+```
+
+`phpstorm` · `idea` · `vscode` · `cursor` · `sublime` · `textmate` · `zed` ·
+`file`. An empty value prints plain text, and so does an editor the package does
+not recognise — emitting a URL scheme nothing will answer is worse than emitting
+none.
+
+**It degrades whenever the output is not a terminal.** Piped into a file or a
+pager, those escapes would sit in the output as control characters and stop a
+grep matching the very paths the column exists to hand over. Both directions are
+tested.
+
 ## Three things it gets right that a naive sweep does not
 
 **1. The cold-process trap.** The first request handled in a PHP process costs a
