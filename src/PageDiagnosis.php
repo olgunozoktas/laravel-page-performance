@@ -47,13 +47,17 @@ final readonly class PageDiagnosis
     /**
      * Below this, a share is arithmetic rather than a finding.
      *
-     * Measured on a real sweep: a 1.8 ms page reported `db-bound` because 0.9 ms
-     * of it was a settings lookup in middleware. True, and useless — there is
-     * nothing to fix on a page that answers in under two milliseconds. Every
-     * ratio label carries this floor now, so the labels describe pages somebody
-     * would actually open.
+     * Measured across two real sweeps. At no floor, a 1.8 ms page reported
+     * `db-bound` because 0.9 ms of it was a settings lookup in middleware. At a
+     * 5 ms floor, thirteen pages still reported it — every one a document page
+     * spending 5-8 ms across a handful of small queries, where the share is high
+     * only because the page does so little else.
+     *
+     * Ten is the number where the label starts naming pages somebody would open:
+     * it keeps the board home at 35 ms of database time and drops the documents.
+     * Under 10 ms of database work there is nothing worth winning.
      */
-    private const float MATERIAL_MS = 5.0;
+    private const float MATERIAL_MS = 10.0;
 
     /**
      * Livewire taking this share of a request is the cost the advice warns about.

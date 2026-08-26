@@ -164,10 +164,11 @@ it('does NOT call a trivially fast page database-bound', function (): void {
      * need an absolute floor or they describe arithmetic rather than a problem.
      */
     expect(diagnosis(wallMs: 1.8, dbMs: 0.9)->labels())->not->toContain('db-bound')
+        ->and(diagnosis(wallMs: 16.0, dbMs: 9.0)->labels())->not->toContain('db-bound')
         ->and(diagnosis(wallMs: 60.0, dbMs: 35.0)->labels())->toContain('db-bound');
 });
 
 it('does NOT call a trivially fast page livewire-bound either', function (): void {
-    expect(diagnosis(wallMs: 8.0, livewireMs: 4.0)->labels())->not->toContain('livewire-bound')
+    expect(diagnosis(wallMs: 18.0, livewireMs: 9.0)->labels())->not->toContain('livewire-bound')
         ->and(diagnosis(wallMs: 40.0, livewireMs: 20.0)->labels())->toContain('livewire-bound');
 });
