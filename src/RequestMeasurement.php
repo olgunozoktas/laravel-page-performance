@@ -23,6 +23,14 @@ final readonly class RequestMeasurement
         public OutboundCalls $outbound = new OutboundCalls,
         public string $cacheControl = '',
         public string $html = '',
+        /** The path actually measured, when a redirect was followed. */
+        public ?string $followedTo = null,
+        /**
+         * Child id => ms the parent spent on it.
+         *
+         * @var array<string, float>
+         */
+        public array $childMs = [],
     ) {}
 
     /**
@@ -52,6 +60,23 @@ final readonly class RequestMeasurement
         return $encoded === false ? $this->bytes : strlen($encoded);
     }
 
+    /**
+     * Did this response actually contain the page?
+     *
+     * `Kernel::handle()` turns an exception into a 500 RESPONSE, so a broken
+     * page never reaches the harness's catch block — it arrives as an ordinary
+     * row. Measured on a real board: five routes answered 404 because their
+     * feature flags were off, and every one was reported as a healthy page with
+     * two queries and no defects. They sorted to the BOTTOM of an evidence-first
+     * ranking, which reads as the healthiest pages in the application.
+     *
+     * A 404 is not a fast page. It is not the page at all.
+     */
+    public function answeredWithThePage(): bool
+    {
+        return $this->status >= 200 && $this->status < 300;
+    }
+
     public function dbMs(): float
     {
         return $this->queries->totalMs();
@@ -72,7 +97,7 @@ final readonly class RequestMeasurement
 
     public function hasChildHeavyComponent(): bool
     {
-        return array_any($this->components, fn (ComponentTiming $component): bool => $component->isChildHeavy());
+        return array_any($this->components, fn (ComponentTiming $c): bool => $c->isChildHeavy($this->childMs));
     }
 
     /**
@@ -114,6 +139,18 @@ final readonly class RequestMeasurement
             || str_contains($this->html, 'wire:snapshot');
     }
 
+    /** The component name behind an id, for naming a heavy child. */
+    public function componentName(string $id): string
+    {
+        foreach ($this->components as $component) {
+            if ($component->id === $id) {
+                return $component->name;
+            }
+        }
+
+        return $id;
+    }
+
     public function diagnosis(?int $queryBudget, bool $budgetsApply = true): PageDiagnosis
     {
         return new PageDiagnosis(
@@ -123,7 +160,14 @@ final readonly class RequestMeasurement
             queries: $this->queries->count(),
             avoidableExecutions: $this->queries->avoidableExecutions(),
             nPlusOneShapes: count($this->queries->nPlusOne()),
+            // Compressed, because `payload-heavy` judges what a visitor pays.
             responseBytes: $this->compressedBytes(),
+            // UNCOMPRESSED, because `snapshot-heavy` compares it against a
+            // snapshot length that is also uncompressed. Dividing a decoded
+            // JSON length by a gzip estimate made the 3% rule behave like 0.33%
+            // at this application's 9:1 ratio, which would have fired the label
+            // on nearly every Livewire page.
+            uncompressedBytes: $this->bytes,
             snapshotBytes: $this->snapshots->totalBytes(),
             hasChildHeavyComponent: $this->hasChildHeavyComponent(),
             outboundCalls: $this->outbound->count(),

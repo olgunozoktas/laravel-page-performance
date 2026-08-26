@@ -130,7 +130,7 @@ final class PageMeasurer
         DB::listen(function (QueryExecuted $query): void {
             $this->records[] = [
                 'sql' => $query->sql,
-                'bindings' => (string) json_encode($query->bindings),
+                'bindings' => QueryDigest::bindingKey($query->bindings),
                 'ms' => $query->time,
                 'location' => $this->callSite(),
             ];
@@ -139,6 +139,7 @@ final class PageMeasurer
 
     private function once(string $path, LivewireProfile $profile): RequestMeasurement
     {
+        $followed = null;
         $profile->reset();
         $this->listenOnce();
         $this->records = [];
@@ -154,6 +155,12 @@ final class PageMeasurer
             $next = parse_url($location, PHP_URL_PATH);
 
             if (is_string($next) && $next !== '' && $next !== $path) {
+                $followed = $next;
+                // Outbound was missing from this reset, so a vendor call made
+                // by the REDIRECTING request was attributed to the target page.
+                // `vendor-bound` is a defect label that claims to be proof, and
+                // after a hop it was not.
+                $this->outbound->reset();
                 $this->records = [];
                 $profile->reset();
                 $started = hrtime(true);
@@ -176,6 +183,9 @@ final class PageMeasurer
             outbound: $this->outbound,
             cacheControl: (string) $response->headers->get('Cache-Control'),
             html: $html,
+            // Named so a row cannot silently report another URL's numbers.
+            followedTo: $followed,
+            childMs: $profile->childMilliseconds(),
         );
     }
 

@@ -97,6 +97,8 @@ final readonly class PageDiagnosis
         public int $nPlusOneShapes,
         public int $responseBytes,
         public int $snapshotBytes,
+        /** Uncompressed page bytes — the like-for-like denominator for the snapshot ratio. */
+        public int $uncompressedBytes,
         public bool $hasChildHeavyComponent,
         public int $outboundCalls,
         public bool $uncacheable,
@@ -248,8 +250,10 @@ final readonly class PageDiagnosis
             return true;
         }
 
-        return $this->responseBytes > 0
-            && $this->snapshotBytes / $this->responseBytes >= self::SNAPSHOT_HEAVY_RATIO;
+        // Both sides uncompressed. `responseBytes` is a gzip estimate and a
+        // snapshot length is not, so dividing one by the other compares nothing.
+        return $this->uncompressedBytes > 0
+            && $this->snapshotBytes / $this->uncompressedBytes >= self::SNAPSHOT_HEAVY_RATIO;
     }
 
     private function ratioOfWall(float $part): float

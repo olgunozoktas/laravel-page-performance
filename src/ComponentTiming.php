@@ -102,10 +102,51 @@ final readonly class ComponentTiming
         return $total;
     }
 
-    /** True when one child dominates this component, which names the thing to open. */
-    public function isChildHeavy(float $ratio = 0.25): bool
+    /**
+     * Does ONE child dominate this component's render?
+     *
+     * It used to compare the SUM of every child against the parent and then
+     * print "N% of its render is one child" — a false sentence about a normal
+     * composition. A shell mounting a nav, a search box and a toast region at
+     * 10% each reported 30% and named no child at all, and `child-heavy` is a
+     * DEFECT label, so a composed interface could never reach zero.
+     *
+     * It also needs the absolute floor every other ratio label carries: a
+     * quarter of a 2 ms render is not worth anybody's afternoon.
+     *
+     * @param  array<string, float>  $childMs  child id => ms this parent spent on it
+     */
+    public function isChildHeavy(array $childMs = [], float $ratio = 0.25, float $floorMs = 10.0): bool
     {
-        return $this->renderMs() > 0.0 && $this->childMs() / $this->renderMs() >= $ratio;
+        $largest = $this->largestChildMs($childMs);
+
+        return $this->renderMs() >= $floorMs
+            && $largest >= $floorMs
+            && $largest / max($this->renderMs(), 0.01) >= $ratio;
+    }
+
+    /**
+     * @param  array<string, float>  $childMs
+     */
+    public function largestChildMs(array $childMs = []): float
+    {
+        $mine = array_intersect_key($childMs, array_flip($this->childIds));
+
+        return $mine === [] ? 0.0 : max($mine);
+    }
+
+    /**
+     * @param  array<string, float>  $childMs
+     */
+    public function largestChildId(array $childMs = []): ?string
+    {
+        $mine = array_intersect_key($childMs, array_flip($this->childIds));
+
+        if ($mine === []) {
+            return null;
+        }
+
+        return (string) array_search(max($mine), $mine, true);
     }
 
     /**

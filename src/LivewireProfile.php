@@ -217,6 +217,30 @@ final class LivewireProfile
         return $total;
     }
 
+    /**
+     * Child id => milliseconds the PARENT spent rendering that child.
+     *
+     * Needed because `child-heavy` is about the largest single child, not the
+     * sum: a shell mounting three children at 10% each is a normal composition,
+     * not a finding.
+     *
+     * @return array<string, float>
+     */
+    public function childMilliseconds(): array
+    {
+        $byChild = [];
+
+        foreach ($this->spans as $span) {
+            $childId = $span->childId();
+
+            if ($childId !== null) {
+                $byChild[$childId] = ($byChild[$childId] ?? 0.0) + $span->ms;
+            }
+        }
+
+        return $byChild;
+    }
+
     public function truncated(): bool
     {
         return $this->truncated;

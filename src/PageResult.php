@@ -136,6 +136,7 @@ final readonly class PageResult
                 nPlusOneShapes: 0,
                 responseBytes: 0,
                 snapshotBytes: 0,
+                uncompressedBytes: 0,
                 hasChildHeavyComponent: false,
                 outboundCalls: 0,
                 uncacheable: false,

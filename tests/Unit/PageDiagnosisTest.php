@@ -23,7 +23,8 @@ function diagnosis(mixed ...$overrides): PageDiagnosis
         'queries' => 5,
         'avoidableExecutions' => 0,
         'nPlusOneShapes' => 0,
-        'responseBytes' => 50_000,
+        'responseBytes' => 50_000,   // compressed — what payload-heavy judges
+        'uncompressedBytes' => 50_000,
         'snapshotBytes' => 500,
         'hasChildHeavyComponent' => false,
         'outboundCalls' => 0,
@@ -125,7 +126,24 @@ it('reports a heavy snapshot in absolute bytes', function (): void {
 
 it('reports a heavy snapshot relative to a small page', function (): void {
     // Under the absolute floor, but a twentieth of the page it rides on.
-    expect(diagnosis(snapshotBytes: 2_000, responseBytes: 40_000)->labels())->toContain('snapshot-heavy');
+    expect(diagnosis(snapshotBytes: 2_000, uncompressedBytes: 40_000)->labels())->toContain('snapshot-heavy');
+});
+
+it('measures the snapshot ratio against the UNCOMPRESSED page', function (): void {
+    /*
+     * The ratio arm divided an uncompressed snapshot length by a gzip estimate.
+     * At a real 9:1 compression that turned a 3% rule into roughly 0.33%, and a
+     * 408-byte snapshot — nothing at all — was reported as heavy on a live
+     * board. A label that fires on nearly every Livewire page is one this
+     * package has already been burned by three times.
+     */
+    $tiny = diagnosis(snapshotBytes: 408, uncompressedBytes: 316_000, responseBytes: 33_000);
+
+    expect($tiny->labels())->not->toContain('snapshot-heavy');
+
+    // and it still fires when the snapshot genuinely is a large share
+    expect(diagnosis(snapshotBytes: 6_000, uncompressedBytes: 160_000, responseBytes: 18_000)->labels())
+        ->toContain('snapshot-heavy');
 });
 
 it('reports an outbound call made inside a render', function (): void {

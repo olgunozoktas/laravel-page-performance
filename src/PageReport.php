@@ -27,7 +27,7 @@ use Olgun\PagePerformance\Support\EditorLink;
  */
 final readonly class PageReport
 {
-    public const array COLUMNS = ['page', 'ms', 'spread', 'cold', 'db', 'lw', 'q', 'dup', 'snap', 'html', 'wire', 'diagnosis'];
+    public const array COLUMNS = ['page', 'st', 'ms', 'spread', 'cold', 'db', 'lw', 'q', 'dup', 'snap', 'html', 'wire', 'diagnosis'];
 
     /**
      * @param  list<PageResult>  $results
@@ -61,12 +61,32 @@ final readonly class PageReport
                 config()->boolean('app.debug') ? 'true' : 'false',
                 $this->livewireTimingAvailable ? 'ON' : 'OFF — '.LivewireProfile::unavailableReason(),
             ),
+            'Answered' => sprintf(
+                '%d returned the page · %d answered a non-2xx and are reported as NOT THE PAGE',
+                $this->answeredCount(true),
+                $this->answeredCount(false),
+            ),
             'Coverage' => $this->filter === ''
                 ? sprintf('%d measured · %d not requestable, each with a reason · %d could not be measured', count($this->results) - $failures, count($this->skipped), $failures)
                 : sprintf('FILTERED to "%s" — %d measured. This is NOT a sweep of the application.', $this->filter, count($this->results) - $failures),
             'Budgets' => 'NOT evaluated here — they are calibrated on the seeded fixture, this reads live data',
             'Not measured' => 'network, TLS, browser render, opcache-warm production, concurrency, mutations',
         ];
+    }
+
+    private function answeredCount(bool $withThePage): int
+    {
+        $n = 0;
+
+        foreach ($this->results as $result) {
+            $run = $result->representative();
+
+            if ($run instanceof RequestMeasurement && $run->answeredWithThePage() === $withThePage) {
+                $n++;
+            }
+        }
+
+        return $n;
     }
 
     /**
@@ -80,11 +100,12 @@ final readonly class PageReport
             $run = $result->representative();
 
             if (! $run instanceof RequestMeasurement) {
-                return [$result->route->name, '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', 'COULD NOT MEASURE: '.$result->failure];
+                return [$result->route->name, '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', 'COULD NOT MEASURE: '.$result->failure];
             }
 
             return [
                 $result->route->name,
+                (string) $run->status,
                 sprintf('%.1f', $result->medianWallMs()),
                 sprintf('%.0f%%', $result->spreadPercent()),
                 sprintf('%.0f', $result->coldMs),
@@ -95,7 +116,14 @@ final readonly class PageReport
                 $this->kb($run->snapshots->totalBytes()),
                 $this->kb($run->bytes),
                 $this->kb($run->compressedBytes()),
-                implode(' · ', $result->diagnosis()->labels()),
+                // A non-2xx is NOT the page. Five routes on one real board
+                // answered 404 because their flags were off, and every one was
+                // reported as a healthy page that sorted to the bottom of an
+                // evidence-first ranking — which reads as the healthiest pages
+                // in the application.
+                $run->answeredWithThePage()
+                    ? implode(' · ', $result->diagnosis()->labels())
+                    : sprintf('NOT THE PAGE — answered %d', $run->status),
             ];
         }, $sorted);
     }
@@ -203,7 +231,9 @@ final readonly class PageReport
     {
         $run = $result->representative();
 
-        if (! $run instanceof RequestMeasurement || $result->diagnosis()->isOk()) {
+        // A 404 is not a fast page; it is not the page. Nothing measured on a
+        // non-2xx response says anything about the route it was requested for.
+        if (! $run instanceof RequestMeasurement || ! $run->answeredWithThePage() || $result->diagnosis()->isOk()) {
             return [];
         }
 
@@ -265,10 +295,22 @@ final readonly class PageReport
         }
 
         foreach ($run->components as $component) {
-            if ($component->isChildHeavy()) {
+            if ($component->isChildHeavy($run->childMs)) {
+                $largest = $component->largestChildMs($run->childMs);
+                $childId = $component->largestChildId($run->childMs);
+
                 $found[] = [
                     'finding' => 'child-heavy',
-                    'evidence' => sprintf('%s: %.0f%% of its render is one child', $component->name, $component->childMs() / max($component->renderMs(), 0.01) * 100),
+                    // The child is NAMED. The previous wording said "one child"
+                    // while summing all of them, which is a false sentence
+                    // about any normally composed page.
+                    'evidence' => sprintf(
+                        '%s spends %.0f%% of its %.1f ms render inside %s',
+                        $component->name,
+                        $largest / max($component->renderMs(), 0.01) * 100,
+                        $component->renderMs(),
+                        $childId === null ? 'a child' : $run->componentName($childId),
+                    ),
                     'where' => '',
                 ];
             }

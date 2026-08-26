@@ -213,3 +213,29 @@ it('names the per-session token as the real reason a page cannot be shared-cache
         ->expectsOutputToContain('per-session token')
         ->assertSuccessful();
 });
+
+it('does NOT report a non-2xx response as a healthy page', function (): void {
+    /*
+     * `Kernel::handle()` turns an exception into a 500 RESPONSE, so a broken
+     * page never reaches the harness's catch — it arrived as an ordinary row.
+     * Measured on a real board: five routes answered 404 because their feature
+     * flags were off, and every one was reported as a healthy page with two
+     * queries and no defects, sorting to the BOTTOM of an evidence-first
+     * ranking. That reads as the healthiest pages in the application.
+     */
+    Route::get('/gone', fn () => abort(404))->name('t.gone');
+
+    $this->artisan('perf:pages', ['--only' => 't.gone', '--repeat' => 1])
+        ->expectsOutputToContain('NOT THE PAGE — answered 404')
+        ->assertSuccessful();
+});
+
+it('lets a non-2xx row contribute no findings at all', function (): void {
+    // A 404 body is small and runs few queries. Judging it would rank an error
+    // page as the best page on the board.
+    Route::get('/gone2', fn () => abort(403))->name('t.gone2');
+
+    $this->artisan('perf:pages', ['--only' => 't.gone2', '--repeat' => 1])
+        ->expectsOutputToContain('No defects')
+        ->assertSuccessful();
+});

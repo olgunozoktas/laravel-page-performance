@@ -83,6 +83,24 @@ final readonly class QueryDigest
     }
 
     /**
+     * A binding set reduced to a string that cannot collapse.
+     *
+     * `json_encode` returns FALSE on malformed UTF-8 — a binary uuid or a blob
+     * binding — and `(string) false` is the empty string. Every such query then
+     * shared one fingerprint: two lookups with different binary ids became a
+     * `repeated-query` that was not one, and an N+1 over a hundred binary keys
+     * counted a single distinct binding set and was missed entirely.
+     *
+     * `serialize()` cannot fail on any value a binding can hold.
+     *
+     * @param  array<array-key, mixed>  $bindings
+     */
+    public static function bindingKey(array $bindings): string
+    {
+        return serialize($bindings);
+    }
+
+    /**
      * Collapse a statement to its shape.
      *
      * `in (?, ?, ?)` becomes `in (?)` so an eager load and a single lookup are
