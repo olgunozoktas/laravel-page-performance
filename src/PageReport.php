@@ -139,7 +139,10 @@ final readonly class PageReport
                 count($pages) === 1 ? $pages[0] : sprintf('%d pages', count($pages)),
                 $group['finding'],
                 $group['evidence'],
-                $links->render($group['where'] === '' ? null : $group['where']),
+                // An em dash for a finding that HAS no location, never
+                // "location unknown" — that phrase means we looked and failed,
+                // and a payload size has no line of code to point at.
+                $group['where'] === '' ? '—' : $links->render($group['where']),
             ];
         }
 

@@ -54,11 +54,13 @@ Every label has a stated rule, so it can be argued with.
 |---|---|
 | `repeated-query` | identical SQL **and** bindings ran ≥2× |
 | `n-plus-one` | identical normalised SQL, ≥5 distinct binding sets |
-| `db-bound` | database time ≥ 50% of the request |
-| `livewire-bound` | Livewire ≥ 40% of the request |
+| `db-bound` | database time ≥ 50% of the request **and** ≥ 10 ms |
+| `livewire-bound` | Livewire ≥ 40% of the request **and** ≥ 10 ms |
 | `child-heavy` | one child ≥ 25% of its parent's render |
 | `payload-heavy` | response ≥ 150 KB |
 | `snapshot-heavy` | snapshot ≥ 4 KB, or ≥ 3% of the page |
+| `vendor-bound` | outbound HTTP was made **inside the render** |
+| `uncacheable` | Livewire set `no-store`, so no CDN or browser may hold this page |
 | `query-heavy` | over the page's query budget |
 | `unbudgeted` | no budget and no stated reason for not having one |
 | `ok` | none of the above — **printed with its numbers**, because a healthy row and an unmeasured row must not look the same |
@@ -116,7 +118,18 @@ shows it in its own column.
 queries, then database time, then bytes, and only then the clock. Deterministic
 evidence decides the order; time is the tiebreak of last resort.
 
-**3. `in (?, ?, ?)` collapses to `in (?)` before anything is counted.** A chunked
+**3. One defect is one row.** A finding carried by 27 pages is printed once,
+with `27 pages` in the page column — not 27 times. A real sweep produced **77**
+findings of which 28 were the same table-existence check from the same line;
+grouped, the same sweep reports **8**. A report you have to de-duplicate by eye
+is a report that gets skimmed.
+
+**4. Ratio labels have an absolute floor.** A 1.8 ms page is not `db-bound`
+because 0.9 ms of it was a settings lookup. Below 10 ms a share is arithmetic,
+not a finding — and `noisy-measurement` needs both a wide spread and a 15 ms
+absolute gap, because 340% of 2.5 ms is jitter.
+
+**5. `in (?, ?, ?)` collapses to `in (?)` before anything is counted.** A chunked
 or paginated loop emits the same statement with a different number of
 placeholders each pass. Unnormalised those are separate shapes and the loop is
 reported as nothing at all.
@@ -158,6 +171,21 @@ budget. Re-measure with `perf:pages --json` and copy the number in by hand.
 
 Assert them in your own test — `Budgets::all()`, `Budgets::covers()` and
 `Budgets::durationKeys()` are the reader.
+
+## Two costs most tools miss
+
+**Outbound HTTP inside a render.** A query is as slow as your database; a third
+party's API is as slow as somebody else's afternoon. `vendor-bound` names the
+host and the count. It sees Laravel's own HTTP client — a raw curl handle or a
+vendor SDK with its own Guzzle goes unseen, so the label firing is proof and its
+silence is not.
+
+**Pages that no cache may hold.** Livewire's `SupportDisablingBackButtonCache`
+sets `Cache-Control: no-store` on **every** page that mounts a component. That is
+right behind a login and quietly expensive on a public one: a marketing or
+landing page you wanted a CDN to hold is uncacheable because it carries a single
+component. `uncacheable` reports it, and needs no instrumentation — it reads the
+response header.
 
 ## Honest limits
 
