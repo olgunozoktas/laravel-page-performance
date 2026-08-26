@@ -136,3 +136,23 @@ it('finds no duration keys in an honest budget', function (): void {
 
     expect(Budgets::durationKeys())->toBeEmpty();
 });
+
+it('prints findings as a TABLE, one row per finding', function (): void {
+    $this->artisan('perf:pages', ['--only' => 't.repeats', '--repeat' => 1])
+        ->expectsOutputToContain('Findings')
+        ->expectsOutputToContain('where')
+        ->assertSuccessful();
+});
+
+it('emits NO escape codes when the output is not a terminal', function (): void {
+    /*
+     * The whole reason `supportsHyperlinks()` exists. Piped into a file or a
+     * pager, an OSC 8 escape sits in the output as control characters and stops
+     * a grep matching the very paths the column exists to hand over. Artisan's
+     * test output is not a TTY, so this asserts the degraded path — which is
+     * also the path CI takes.
+     */
+    $this->artisan('perf:pages', ['--only' => 't.repeats', '--repeat' => 1])
+        ->doesntExpectOutputToContain("\e]8;;")
+        ->assertSuccessful();
+});

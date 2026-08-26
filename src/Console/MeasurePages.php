@@ -12,6 +12,8 @@ use Olgun\PagePerformance\MeasurableRoute;
 use Olgun\PagePerformance\PageMeasurer;
 use Olgun\PagePerformance\PageReport;
 use Olgun\PagePerformance\RouteCatalogue;
+use Olgun\PagePerformance\Support\EditorLink;
+use Symfony\Component\Console\Output\StreamOutput;
 
 /**
  * What does each page cost, and why?
@@ -149,7 +151,8 @@ final class MeasurePages extends Command
         $this->newLine();
         $this->table(PageReport::COLUMNS, $report->rows());
 
-        $findings = $report->findings();
+        $links = EditorLink::fromConfig($this->supportsHyperlinks());
+        $findings = $report->findingRows($links);
 
         if ($findings === []) {
             $this->components->info('Every page measured is ok. Nothing to act on.');
@@ -158,10 +161,34 @@ final class MeasurePages extends Command
         }
 
         $this->newLine();
+        $this->components->twoColumnDetail(
+            '<options=bold>Findings</>',
+            sprintf('%d, worst page first', count($findings)),
+        );
+        $this->table(PageReport::FINDING_COLUMNS, $findings);
 
-        foreach ($findings as $finding) {
-            $this->line($finding);
-            $this->newLine();
+        if (! $this->supportsHyperlinks()) {
+            return;
         }
+
+        $this->components->info('The `where` column is clickable. Set page-performance.editor to change which editor opens.');
+    }
+
+    /**
+     * Whether emitting an OSC 8 hyperlink is safe here.
+     *
+     * Only into a terminal. Piped into a file, a pager or another command, the
+     * escapes would sit in the output as control characters and stop a grep
+     * from matching the very paths this column exists to hand over.
+     */
+    private function supportsHyperlinks(): bool
+    {
+        $output = $this->output->getOutput();
+
+        if (! $output instanceof StreamOutput) {
+            return false;
+        }
+
+        return stream_isatty($output->getStream());
     }
 }

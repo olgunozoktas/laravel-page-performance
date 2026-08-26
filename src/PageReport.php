@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Olgun\PagePerformance;
 
 use Illuminate\Support\Facades\DB;
+use Olgun\PagePerformance\Support\EditorLink;
 
 /**
  * The measured pages, rendered so a reader knows what to open.
@@ -98,51 +99,82 @@ final readonly class PageReport
         }, $sorted);
     }
 
+    public const array FINDING_COLUMNS = ['#', 'page', 'finding', 'evidence', 'where'];
+
     /**
-     * One block per page worth acting on, each ending in something runnable.
+     * EVERY finding, one per row, worst page first.
      *
-     * @return list<string>
+     * A row per FINDING rather than a paragraph per page, because the question
+     * being asked is "what is there to fix" and the answer is a list. The
+     * `where` column is a clickable link wherever the terminal and the
+     * configured editor both support it, and plain text everywhere else.
+     *
+     * @return list<array<int, string>>
      */
-    public function findings(): array
+    public function findingRows(EditorLink $links): array
     {
-        $blocks = [];
+        $rows = [];
+        $n = 0;
 
         foreach ($this->sorted() as $result) {
             $run = $result->representative();
-            if (! $run instanceof RequestMeasurement) {
-                continue;
-            }
-            if ($result->diagnosis()->isOk()) {
+
+            if (! $run instanceof RequestMeasurement || $result->diagnosis()->isOk()) {
                 continue;
             }
 
-            $lines = [sprintf('<options=bold>%s</> %s   %s', $result->route->name, $result->route->path(), implode(' · ', $result->diagnosis()->labels()))];
+            $page = $result->route->name;
+            $labels = $result->diagnosis()->labels();
 
             foreach ($run->queries->repeated() as $repeat) {
-                $lines[] = sprintf('    x%-3d %s', $repeat['runs'], mb_strimwidth($repeat['sql'], 0, 96, '…'));
-                $lines[] = sprintf('         %s', $repeat['location'] ?? 'location unknown');
+                $rows[] = [(string) ++$n, $page, 'repeated-query',
+                    sprintf('x%d %s', $repeat['runs'], mb_strimwidth($repeat['sql'], 0, 58, '…')),
+                    $links->render($repeat['location'])];
+            }
+
+            foreach ($run->queries->nPlusOne() as $loop) {
+                $rows[] = [(string) ++$n, $page, 'n-plus-one',
+                    sprintf('%d distinct bindings · %s', $loop['distinct_bindings'], mb_strimwidth($loop['sql'], 0, 44, '…')),
+                    $links->render($loop['location'])];
+            }
+
+            if (in_array('db-bound', $labels, true)) {
+                $slowest = $run->queries->slowest();
+                $rows[] = [(string) ++$n, $page, 'db-bound',
+                    sprintf('%.1f ms of %.1f ms in the database', $run->dbMs(), $run->wallMs),
+                    $links->render($slowest['location'] ?? null)];
+            }
+
+            if (in_array('livewire-bound', $labels, true)) {
+                $rows[] = [(string) ++$n, $page, 'livewire-bound',
+                    sprintf('%.1f ms of %.1f ms in Livewire', $run->livewireMs, $run->wallMs), '—'];
             }
 
             foreach ($run->components as $component) {
                 if ($component->isChildHeavy()) {
-                    $lines[] = sprintf('    %s spends %.2f ms of its %.2f ms render inside a child', $component->name, $component->childMs(), $component->renderMs());
+                    $rows[] = [(string) ++$n, $page, 'child-heavy',
+                        sprintf('%s: %.1f ms of its %.1f ms render is a child', $component->name, $component->childMs(), $component->renderMs()), '—'];
                 }
+            }
+
+            if (in_array('payload-heavy', $labels, true) || in_array('oversized-html', $labels, true)) {
+                $rows[] = [(string) ++$n, $page, 'payload-heavy', sprintf('%s of HTML', $this->kb($run->bytes)), '—'];
             }
 
             $heaviest = $run->snapshots->heaviest();
 
-            if ($heaviest !== null && $heaviest['bytes'] >= 4_096) {
-                $lines[] = sprintf('    %s carries a %s snapshot, sent up AND back on every interaction', $heaviest['name'], $this->kb($heaviest['bytes']));
+            if (in_array('snapshot-heavy', $labels, true) && $heaviest !== null) {
+                $rows[] = [(string) ++$n, $page, 'snapshot-heavy',
+                    sprintf('%s carries %s, sent up AND back per interaction', $heaviest['name'], $this->kb($heaviest['bytes'])), '—'];
             }
 
             if ($result->spreadPercent() >= 25.0) {
-                $lines[] = sprintf('    spread %.0f%% — these runs disagreed enough that the position is not trustworthy', $result->spreadPercent());
+                $rows[] = [(string) ++$n, $page, 'noisy-measurement',
+                    sprintf('%.0f%% spread — this row\'s position is not trustworthy', $result->spreadPercent()), '—'];
             }
-
-            $blocks[] = implode(PHP_EOL, $lines);
         }
 
-        return $blocks;
+        return $rows;
     }
 
     /** Nothing measured is NOT a pass — the command turns this into exit 2. */
@@ -166,6 +198,8 @@ final readonly class PageReport
             'conditions' => $this->conditions(),
             'columns' => self::COLUMNS,
             'rows' => $this->rows(),
+            'finding_columns' => self::FINDING_COLUMNS,
+            'findings' => $this->findingRows(new EditorLink(null, '', false)),
             'skipped' => array_map(static fn (MeasurableRoute $r): array => ['route' => $r->name, 'reason' => $r->skipReason], $this->skipped),
         ];
     }

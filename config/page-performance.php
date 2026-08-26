@@ -36,6 +36,18 @@ return [
     'iterations' => 5,
 
     /*
+     * Which editor a clickable `where` link should open.
+     *
+     * phpstorm · idea · vscode · cursor · sublime · textmate · zed · file
+     * Empty disables the links and prints plain text.
+     *
+     * Links are emitted as OSC 8 escapes and ONLY when the output is a real
+     * terminal — piping to a file or a pager would otherwise fill it with
+     * control characters and stop a grep matching the paths.
+     */
+    'editor' => env('PAGE_PERFORMANCE_EDITOR', 'phpstorm'),
+
+    /*
      * Ceilings the host's own test asserts. DETERMINISTIC COUNTERS ONLY —
      * never a millisecond, which changes on every machine and every run.
      *
