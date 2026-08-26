@@ -175,6 +175,7 @@ final class PageMeasurer
             bytes: strlen($html),
             outbound: $this->outbound,
             cacheControl: (string) $response->headers->get('Cache-Control'),
+            html: $html,
         );
     }
 

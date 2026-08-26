@@ -22,7 +22,35 @@ final readonly class RequestMeasurement
         public int $bytes,
         public OutboundCalls $outbound = new OutboundCalls,
         public string $cacheControl = '',
+        public string $html = '',
     ) {}
+
+    /**
+     * What the visitor actually downloads.
+     *
+     * THE UNCOMPRESSED FIGURE IS NOT THE COST, and reporting it alone sends
+     * people on refactors worth nothing. Measured on a real board home page:
+     * 287,831 bytes of HTML arrives as 32,514 over the wire — 89% smaller —
+     * because the things that make server-rendered HTML big are repeated
+     * Tailwind classes, repeated inline SVG and framework comments, and
+     * repetition is precisely what a compressor removes.
+     *
+     * This nearly cost a day: 12.5 KB of duplicated SVG and 21.9 KB of
+     * identical Livewire morph markers both looked like obvious wins and both
+     * compress to almost nothing. An icon-sprite refactor would have risked a
+     * visual regression on every page of the application to save roughly two
+     * hundred bytes.
+     *
+     * gzip at the default level, because that is what a web server does. It is
+     * an estimate of the wire size, not a measurement of one — the in-process
+     * request never reaches nginx.
+     */
+    public function compressedBytes(): int
+    {
+        $encoded = gzencode($this->html, 6);
+
+        return $encoded === false ? $this->bytes : strlen($encoded);
+    }
 
     public function dbMs(): float
     {
@@ -74,7 +102,7 @@ final readonly class RequestMeasurement
             queries: $this->queries->count(),
             avoidableExecutions: $this->queries->avoidableExecutions(),
             nPlusOneShapes: count($this->queries->nPlusOne()),
-            responseBytes: $this->bytes,
+            responseBytes: $this->compressedBytes(),
             snapshotBytes: $this->snapshots->totalBytes(),
             hasChildHeavyComponent: $this->hasChildHeavyComponent(),
             outboundCalls: $this->outbound->count(),

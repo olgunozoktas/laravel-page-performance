@@ -71,7 +71,15 @@ final readonly class PageDiagnosis
      */
     private const float LIVEWIRE_BOUND_RATIO = 0.40;
 
-    private const int PAYLOAD_HEAVY_BYTES = 150_000;
+    /**
+     * Heavy in the units the visitor pays: bytes ON THE WIRE, compressed.
+     *
+     * The old rule used 150 KB of uncompressed HTML and was wrong by roughly
+     * nine times — a 288 KB page ships as 32 KB. 100 KB compressed is seven
+     * round trips at the initial congestion window, which is a page worth
+     * opening.
+     */
+    private const int PAYLOAD_HEAVY_BYTES = 100_000;
 
     private const int SNAPSHOT_HEAVY_BYTES = 4_096;
 

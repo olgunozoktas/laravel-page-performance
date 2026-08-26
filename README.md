@@ -56,7 +56,8 @@ also get per-component render timing and snapshot payload bytes.
 | `lw` | Livewire time, children counted once. Empty when Livewire is absent or `app.debug` is false. |
 | `q` / `dup` | Queries, and how many executions a fix would delete. |
 | `snap` | Livewire snapshot bytes — sent up **and** back on every interaction. |
-| `html` | Response bytes. |
+| `html` | Response bytes, uncompressed. |
+| `wire` | **What the visitor downloads.** Estimated gzip size — the number `payload-heavy` judges. |
 
 ### The diagnosis vocabulary
 
@@ -69,7 +70,7 @@ Every label has a stated rule, so it can be argued with.
 | `db-bound` | database time ≥ 50% of the request **and** ≥ 10 ms |
 | `livewire-bound` | Livewire ≥ 40% of the request **and** ≥ 10 ms |
 | `child-heavy` | one child ≥ 25% of its parent's render |
-| `payload-heavy` | response ≥ 150 KB |
+| `payload-heavy` | response ≥ 100 KB **compressed** |
 | `snapshot-heavy` | snapshot ≥ 4 KB, or ≥ 3% of the page |
 | `vendor-bound` | outbound HTTP was made **inside the render** |
 | `uncacheable` | Livewire set `no-store`, so no CDN or browser may hold this page |
@@ -141,7 +142,15 @@ because 0.9 ms of it was a settings lookup. Below 10 ms a share is arithmetic,
 not a finding — and `noisy-measurement` needs both a wide spread and a 15 ms
 absolute gap, because 340% of 2.5 ms is jitter.
 
-**5. `in (?, ?, ?)` collapses to `in (?)` before anything is counted.** A chunked
+**5. Page weight is judged COMPRESSED, because that is what a visitor pays.**
+Measured on a real board home page: 287,831 bytes of HTML arrive as **32,514**
+over the wire, 89% smaller. The things that make server-rendered HTML large —
+repeated Tailwind classes, repeated inline SVG, framework comments — are exactly
+what a compressor removes. Judging the uncompressed number sends people to
+refactor a shared icon component for about two hundred real bytes. Both figures
+are reported so the ratio is visible.
+
+**6. `in (?, ?, ?)` collapses to `in (?)` before anything is counted.** A chunked
 or paginated loop emits the same statement with a different number of
 placeholders each pass. Unnormalised those are separate shapes and the loop is
 reported as nothing at all.

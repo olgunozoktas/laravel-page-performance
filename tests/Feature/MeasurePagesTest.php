@@ -29,7 +29,15 @@ beforeEach(function (): void {
         return 'done';
     })->name('t.repeats');
 
-    Route::get('/big', fn (): string => str_repeat('x', 300_000))->name('t.big');
+    // Incompressible on purpose: 300,000 repeated characters weigh almost
+    // nothing over the wire, which is the entire point of measuring the
+    // compressed size. Base64 of random bytes does not compress.
+    Route::get('/big', fn (): string => base64_encode(random_bytes(150_000)))->name('t.big');
+
+    // Large and highly compressible — the honest negative. This is what a
+    // server-rendered page with repeated Tailwind classes and inline SVG looks
+    // like to a compressor, and it must NOT be reported as heavy.
+    Route::get('/compressible', fn (): string => str_repeat('<div class="flex items-center gap-2">x</div>', 8_000))->name('t.compressible');
 
     Route::post('/mutates', fn (): string => 'no')->name('t.mutates');
     Route::get('/with/{id}', fn (string $id): string => $id)->name('t.parameterised');
@@ -47,9 +55,23 @@ it('finds a repeated query and names how many runs', function (): void {
         ->assertSuccessful();
 });
 
-it('finds an oversized response', function (): void {
+it('finds a response that is genuinely heavy OVER THE WIRE', function (): void {
     $this->artisan('perf:pages', ['--only' => 't.big', '--repeat' => 1])
         ->expectsOutputToContain('payload-heavy')
+        ->assertSuccessful();
+});
+
+it('does NOT call a large but compressible page heavy', function (): void {
+    /*
+     * The measurement that nearly cost a day. A real board home page is 287,831
+     * bytes of HTML and 32,514 over the wire — 89% smaller — because repeated
+     * classes, repeated SVG and framework comments are exactly what a
+     * compressor removes. Reporting the uncompressed number would have sent
+     * somebody to refactor a shared icon component, risking a visual regression
+     * on every page, to save about two hundred bytes.
+     */
+    $this->artisan('perf:pages', ['--only' => 't.compressible', '--repeat' => 1])
+        ->doesntExpectOutputToContain('payload-heavy')
         ->assertSuccessful();
 });
 

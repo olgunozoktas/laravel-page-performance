@@ -27,7 +27,7 @@ use Olgun\PagePerformance\Support\EditorLink;
  */
 final readonly class PageReport
 {
-    public const array COLUMNS = ['page', 'ms', 'spread', 'cold', 'db', 'lw', 'q', 'dup', 'snap', 'html', 'diagnosis'];
+    public const array COLUMNS = ['page', 'ms', 'spread', 'cold', 'db', 'lw', 'q', 'dup', 'snap', 'html', 'wire', 'diagnosis'];
 
     /**
      * @param  list<PageResult>  $results
@@ -80,7 +80,7 @@ final readonly class PageReport
             $run = $result->representative();
 
             if (! $run instanceof RequestMeasurement) {
-                return [$result->route->name, '—', '—', '—', '—', '—', '—', '—', '—', '—', 'COULD NOT MEASURE: '.$result->failure];
+                return [$result->route->name, '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', 'COULD NOT MEASURE: '.$result->failure];
             }
 
             return [
@@ -94,6 +94,7 @@ final readonly class PageReport
                 (string) $run->queries->avoidableExecutions(),
                 $this->kb($run->snapshots->totalBytes()),
                 $this->kb($run->bytes),
+                $this->kb($run->compressedBytes()),
                 implode(' · ', $result->diagnosis()->labels()),
             ];
         }, $sorted);
@@ -242,7 +243,11 @@ final readonly class PageReport
         }
 
         if (in_array('payload-heavy', $labels, true) || in_array('oversized-html', $labels, true)) {
-            $found[] = ['finding' => 'payload-heavy', 'evidence' => sprintf('%s of HTML', $this->kb($run->bytes)), 'where' => ''];
+            $found[] = [
+                'finding' => 'payload-heavy',
+                'evidence' => sprintf('%s over the wire (%s uncompressed)', $this->kb($run->compressedBytes()), $this->kb($run->bytes)),
+                'where' => '',
+            ];
         }
 
         $heaviest = $run->snapshots->heaviest();
