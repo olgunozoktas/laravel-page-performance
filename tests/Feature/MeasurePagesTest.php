@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Olgun\PagePerformance\Budgets;
@@ -275,4 +276,50 @@ it('says plainly when the watchdog is off', function (): void {
     $this->artisan('perf:pages', ['--only' => 't.quick', '--repeat' => 1, '--timeout' => 0])
         ->expectsOutputToContain('OFF by --timeout=0')
         ->assertSuccessful();
+});
+
+it('reports a runaway page through the real command, not just the label rules', function (): void {
+    /*
+     * The unit test proves the RULE. This proves the WIRING — the run median is
+     * computed in PageReport and has to reach PageDiagnosis through PageResult
+     * and RequestMeasurement. A break anywhere on that path leaves the label
+     * permanently silent, which is indistinguishable from a healthy board.
+     */
+    foreach (['a', 'b', 'c'] as $quick) {
+        Route::get('/rq-'.$quick, fn (): string => 'ok')->name('t.rq.'.$quick);
+    }
+
+    // Past the 250 ms floor and far past 10x the median of three instant pages.
+    Route::get('/rq-slow', function (): string {
+        usleep(400_000);
+
+        return 'slow';
+    })->name('t.rq.slow');
+
+    $this->artisan('perf:pages', ['--only' => 't.rq', '--repeat' => 1])
+        ->expectsOutputToContain('runaway')
+        ->assertSuccessful();
+});
+
+it('leaves the other pages in that same run alone', function (): void {
+    // The other half. A label that marks every page in a run containing one
+    // slow page has moved the problem rather than found it.
+    foreach (['a', 'b', 'c'] as $quick) {
+        Route::get('/rc-'.$quick, fn (): string => 'ok')->name('t.rc.'.$quick);
+    }
+
+    Route::get('/rc-slow', function (): string {
+        usleep(400_000);
+
+        return 'slow';
+    })->name('t.rc.slow');
+
+    $this->artisan('perf:pages', ['--only' => 't.rc', '--repeat' => 1])
+        ->assertSuccessful();
+
+    // Exactly one row carries it, so the count of the word in the findings
+    // table cannot be three or four.
+    $output = Artisan::output();
+
+    expect(substr_count($output, 'runaway'))->toBeLessThanOrEqual(2);
 });
