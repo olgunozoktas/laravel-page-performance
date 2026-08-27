@@ -23,6 +23,13 @@ board.home /   repeated-query · db-bound · payload-heavy
 A table of milliseconds tells you which page is slowest. It does not tell you
 what to open. Every finding here ends in a file and a line.
 
+**Those route names are real.** `board.home`, `board.directory` and
+`board.rules` are pages of [SeeRanks](https://seeranks.com), the application
+this package was written for and is measured against. Every number in this
+README — the 150.4 ms cold request, the 287,831 bytes that arrive as 32,514, the
+77 findings that group to 8 — came from a sweep of that codebase, not from a
+benchmark written to make a point.
+
 ## Install
 
 **Not on Packagist yet.** Add the repository, then require it:
@@ -285,6 +292,25 @@ composer test   # pint --test, phpstan level max, pest
 Every detector is proved able to **fire** and able to **stay quiet** — including
 a page with nothing wrong, which must produce exactly `ok`. A detector that
 reports nothing everywhere cannot be told from a broken one.
+
+## Where this came from, and what else runs on it
+
+This package exists because one Laravel application needed it. That application
+is [**SeeRanks**](https://seeranks.com) — a paid ranking board for developer
+products, being rebuilt on Laravel 13 + Livewire 4. It is where the cold-process
+trap was measured, where the `no-store` finding was traced to a real CSRF token,
+and where a 77-finding sweep turned out to be 8 defects printed 77 times.
+
+Two other things by the same author, both free:
+
+| | |
+|---|---|
+| [**FindUtils**](https://findutils.com) | Nearly 400 free online tools — converters, formatters, generators, calculators. The work happens in the browser: no account, and files are not uploaded. |
+| [**Emoji Favicons**](https://emojifavicons.com) | Turn any emoji into a favicon, with a documented API. One `<link>` tag and a site has an icon. |
+
+Neither is a Laravel application, so neither is measured by this package. They
+are here because the same person maintains all four, and because a tool is
+easier to trust when you can see what else its author ships.
 
 ## Licence
 
