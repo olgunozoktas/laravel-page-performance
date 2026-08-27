@@ -61,6 +61,7 @@ final class PageMeasurer
         private int $warmup = 1,
         private int $iterations = 5,
         private ?Authenticatable $actingAs = null,
+        private ?Watchdog $watchdog = null,
     ) {}
 
     public function measure(MeasurableRoute $route): PageResult
@@ -85,6 +86,10 @@ final class PageMeasurer
             }
 
             return new PageResult($route, $cold, $runs);
+        } catch (PageTimedOut $timedOut) {
+            // Named apart from the generic failure so the report can say a loop,
+            // not "something went wrong". They are different problems.
+            return PageResult::failed($route, $timedOut->getMessage());
         } catch (Throwable $throwable) {
             return PageResult::failed($route, Str::limit($throwable->getMessage(), 120));
         } finally {
@@ -190,6 +195,25 @@ final class PageMeasurer
     }
 
     private function send(string $path): Response
+    {
+        $watchdog = $this->watchdog ??= new Watchdog;
+        $watchdog->arm();
+
+        try {
+            $response = $this->handle($path);
+        } finally {
+            $watchdog->disarm();
+        }
+
+        // Read AFTER the kernel returns. The kernel catches the thrown
+        // PageTimedOut and renders a 500, so the exception alone would surface
+        // as an ordinary error row that says nothing about time.
+        throw_if($watchdog->fired(), new PageTimedOut($watchdog->seconds()));
+
+        return $response;
+    }
+
+    private function handle(string $path): Response
     {
         $request = Request::create($path, 'GET');
 

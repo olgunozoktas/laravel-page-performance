@@ -31,6 +31,7 @@ function diagnosis(mixed ...$overrides): PageDiagnosis
         'uncacheable' => false,
         'queryBudget' => 10,
         'budgetsApply' => true,
+        'runMedianMs' => null,
     ];
 
     return new PageDiagnosis(...[...$defaults, ...$overrides]);
@@ -189,4 +190,41 @@ it('does NOT call a trivially fast page database-bound', function (): void {
 it('does NOT call a trivially fast page livewire-bound either', function (): void {
     expect(diagnosis(wallMs: 18.0, livewireMs: 9.0)->labels())->not->toContain('livewire-bound')
         ->and(diagnosis(wallMs: 40.0, livewireMs: 20.0)->labels())->toContain('livewire-bound');
+});
+
+it('calls a page far slower than every other page in the run a defect', function (): void {
+    /*
+     * THE ONLY LABEL HERE THAT CATCHES A LOOP. Every other defect names a
+     * MECHANISM — a repeated query, an N+1, a vendor call inside the render. A
+     * loop that burns CPU and touches nothing produces none of them: it shows
+     * as a large `ms` and, because milliseconds are deliberately never a sort
+     * key, lands wherever its evidence puts it, which is the bottom of the
+     * table. It was reported as the healthiest page in the application.
+     */
+    expect(diagnosis(wallMs: 4_000.0, runMedianMs: 40.0)->labels())->toContain('runaway');
+
+    expect(diagnosis(wallMs: 4_000.0, runMedianMs: 40.0)->defects())->toContain('runaway');
+});
+
+it('does NOT call a page runaway for merely being the slowest', function (): void {
+    /*
+     * Both halves of the rule are load-bearing, and each is tested alone.
+     *
+     * The RATIO, because an absolute millisecond threshold does not survive a
+     * slow machine — the standing rule at the top of PageDiagnosis. The FLOOR,
+     * because a board where every page is under 5 ms has a median near zero,
+     * and 10x of nearly nothing is still nearly nothing: without it, one page
+     * 3 ms slower than the rest would be reported as a bug.
+     */
+    // Over the floor, but only 3x the median.
+    expect(diagnosis(wallMs: 900.0, runMedianMs: 300.0)->labels())->not->toContain('runaway');
+
+    // 30x the median, but 4.5 ms is not a loop. This is the real board.
+    expect(diagnosis(wallMs: 4.5, runMedianMs: 0.15)->labels())->not->toContain('runaway');
+});
+
+it('cannot call a single page an outlier of itself', function (): void {
+    // With no run to compare against there is no median, and a comparison of a
+    // number to itself fires every time. A one-page run must stay silent.
+    expect(diagnosis(wallMs: 9_000.0, runMedianMs: null)->labels())->not->toContain('runaway');
 });

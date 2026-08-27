@@ -88,6 +88,24 @@ final readonly class PageDiagnosis
     /** Within this share of a budget, a page is worth watching before it goes over. */
     private const float WATCH_RATIO = 0.80;
 
+    /**
+     * How many times the run's own median a page must cost to be a defect.
+     *
+     * A LOOP BUG IS THE THING THIS CATCHES. Every other defect here names a
+     * MECHANISM — a repeated query, an N+1, a vendor call in the render. A loop
+     * that burns CPU and touches nothing produces none of them: it shows as a
+     * large `ms` and, because milliseconds are deliberately never a sort key,
+     * lands wherever its evidence puts it, which is the bottom.
+     *
+     * The comparison is a RATIO to the same run on the same machine in the same
+     * minute, never an absolute millisecond threshold, for the reason at the top
+     * of this class. The floor is what keeps it from firing on a board where
+     * every page is under 5 ms and one of them is 3 ms slower than the rest.
+     */
+    private const float RUNAWAY_MULTIPLE = 10.0;
+
+    private const float RUNAWAY_FLOOR_MS = 250.0;
+
     public function __construct(
         public float $wallMs,
         public float $dbMs,
@@ -114,6 +132,12 @@ final readonly class PageDiagnosis
          * stop meaning anything. The gate owns budgets; the sweeper measures.
          */
         public bool $budgetsApply = true,
+        /**
+         * The median of every page in this run, or null when there is no run to
+         * compare against — a single-page measurement is not an outlier of
+         * anything, and a label that compares a number to itself always fires.
+         */
+        public ?float $runMedianMs = null,
     ) {}
 
     /**
@@ -165,6 +189,10 @@ final readonly class PageDiagnosis
             $labels[] = 'snapshot-heavy';
         }
 
+        if ($this->isRunaway()) {
+            $labels[] = 'runaway';
+        }
+
         if ($this->budgetsApply && $this->queryBudget === null) {
             $labels[] = 'unbudgeted';
         }
@@ -185,6 +213,7 @@ final readonly class PageDiagnosis
      * @var list<string>
      */
     public const array DEFECTS = [
+        'runaway',
         'repeated-query',
         'n-plus-one',
         'query-heavy',
@@ -195,6 +224,20 @@ final readonly class PageDiagnosis
         'child-heavy',
         'unbudgeted',
     ];
+
+    /**
+     * Far slower than every other page in the same run, for no reason this tool
+     * can name. That combination is a loop, a sleep, or a blocking call.
+     */
+    public function isRunaway(): bool
+    {
+        if ($this->runMedianMs === null || $this->runMedianMs <= 0.0) {
+            return false;
+        }
+
+        return $this->wallMs >= self::RUNAWAY_FLOOR_MS
+            && $this->wallMs >= $this->runMedianMs * self::RUNAWAY_MULTIPLE;
+    }
 
     public function isOk(): bool
     {

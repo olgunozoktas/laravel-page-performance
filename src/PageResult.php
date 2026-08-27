@@ -119,12 +119,12 @@ final readonly class PageResult
      * its budget is the host's budget test's question, asked against the fixture the
      * number came from.
      */
-    public function diagnosis(): PageDiagnosis
+    public function diagnosis(?float $runMedianMs = null): PageDiagnosis
     {
         $representative = $this->representative();
 
         return $representative instanceof RequestMeasurement
-            ? $representative->diagnosis(null, budgetsApply: false)
+            ? $representative->diagnosis(null, budgetsApply: false, runMedianMs: $runMedianMs)
             // Named, not positional: this list grows, and a bool landing in an
             // int slot is the kind of drift a compiler cannot always catch.
             : new PageDiagnosis(

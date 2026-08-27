@@ -151,7 +151,7 @@ final readonly class RequestMeasurement
         return $id;
     }
 
-    public function diagnosis(?int $queryBudget, bool $budgetsApply = true): PageDiagnosis
+    public function diagnosis(?int $queryBudget, bool $budgetsApply = true, ?float $runMedianMs = null): PageDiagnosis
     {
         return new PageDiagnosis(
             wallMs: $this->wallMs,
@@ -174,6 +174,7 @@ final readonly class RequestMeasurement
             uncacheable: $this->isUncacheable(),
             queryBudget: $queryBudget,
             budgetsApply: $budgetsApply,
+            runMedianMs: $runMedianMs,
         );
     }
 }

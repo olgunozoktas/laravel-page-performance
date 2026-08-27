@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Route;
 use Olgun\PagePerformance\Budgets;
 use Olgun\PagePerformance\LivewireProfile;
 use Olgun\PagePerformance\RouteCatalogue;
+use Olgun\PagePerformance\Watchdog;
 
 /*
  * The command, exercised against routes this test defines, so the assertions
@@ -237,5 +238,41 @@ it('lets a non-2xx row contribute no findings at all', function (): void {
 
     $this->artisan('perf:pages', ['--only' => 't.gone2', '--repeat' => 1])
         ->expectsOutputToContain('No defects')
+        ->assertSuccessful();
+});
+
+it('stops a page that never returns, instead of hanging the sweep', function (): void {
+    /*
+     * Nothing else here had a time limit. `Kernel::handle()` runs on the same
+     * thread as the measurer and the CLI SAPI sets max_execution_time to 0, so
+     * a `while (true)` in a controller ran until somebody pressed Ctrl-C — with
+     * no output naming the page, and every page after it unmeasured.
+     */
+    Route::get('/loops', function (): string {
+        // Not `while (true)`: if the watchdog is ever broken this test must
+        // fail, not wedge the suite. Two seconds past the one-second limit is
+        // enough to prove the alarm fires and short enough to survive.
+        $until = microtime(true) + 3.0;
+        while (microtime(true) < $until) {
+            // burn
+        }
+
+        return 'never in time';
+    })->name('t.loops');
+
+    // Exit 2, not 0. The only page in this filter timed out, so nothing was
+    // measured — and "nothing could be measured" is deliberately not a pass.
+    $this->artisan('perf:pages', ['--only' => 't.loops', '--repeat' => 1, '--timeout' => 1])
+        ->expectsOutputToContain('did not answer within 1 s')
+        ->assertExitCode(2);
+})->skip(! Watchdog::available(), 'ext-pcntl is absent, so the watchdog cannot arm here.');
+
+it('says plainly when the watchdog is off', function (): void {
+    // A guard that is off must say so. Silence about a watchdog reads as an
+    // armed one, and its whole purpose is what happens when nobody is watching.
+    Route::get('/quick', fn (): string => 'ok')->name('t.quick');
+
+    $this->artisan('perf:pages', ['--only' => 't.quick', '--repeat' => 1, '--timeout' => 0])
+        ->expectsOutputToContain('OFF by --timeout=0')
         ->assertSuccessful();
 });

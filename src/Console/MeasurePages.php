@@ -13,6 +13,7 @@ use Olgun\PagePerformance\PageMeasurer;
 use Olgun\PagePerformance\PageReport;
 use Olgun\PagePerformance\RouteCatalogue;
 use Olgun\PagePerformance\Support\EditorLink;
+use Olgun\PagePerformance\Watchdog;
 use Symfony\Component\Console\Output\StreamOutput;
 
 /**
@@ -39,6 +40,7 @@ final class MeasurePages extends Command
         {--repeat=5 : Timed iterations per page; the first is always discarded}
         {--only= : Substring filter on the route name}
         {--shuffle : Randomise page order, so an ordering effect becomes visible}
+        {--timeout=15 : Seconds one page may take before it is called a loop; 0 switches the watchdog off}
         {--open= : Open finding N in the configured editor (for terminals with no clickable links)}
         {--json : Machine-readable report}';
 
@@ -64,6 +66,7 @@ final class MeasurePages extends Command
             warmup: config()->integer('page-performance.warmup', 1),
             iterations: max(1, (int) $this->option('repeat')),
             actingAs: $this->actor(),
+            watchdog: new Watchdog((int) $this->option('timeout')),
         );
 
         $results = [];
@@ -79,6 +82,7 @@ final class MeasurePages extends Command
             RouteCatalogue::fromConfig()->skipped(),
             LivewireProfile::available(),
             is_string($only) ? $only : '',
+            watchdogSeconds: (int) $this->option('timeout'),
         );
 
         if ($this->option('json') === true) {

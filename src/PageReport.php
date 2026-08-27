@@ -30,6 +30,42 @@ final readonly class PageReport
     public const array COLUMNS = ['page', 'st', 'ms', 'spread', 'cold', 'db', 'lw', 'q', 'dup', 'snap', 'html', 'wire', 'diagnosis'];
 
     /**
+     * The median page in this run, which is what `runaway` compares against.
+     *
+     * A NON-2XX IS EXCLUDED. An error page is small and fast, and five of them
+     * on one real board dragged the median down far enough to make a healthy
+     * page look like an outlier. The baseline must be built from pages.
+     *
+     * Null when fewer than three pages answered: two pages have no meaningful
+     * middle, and calling one of them the outlier is arithmetic, not evidence.
+     */
+    private function runMedianMs(): ?float
+    {
+        // Recomputed rather than memoised: this class is readonly on purpose,
+        // and a sweep is tens of pages, not thousands.
+        $times = [];
+
+        foreach ($this->results as $result) {
+            $run = $result->representative();
+
+            if ($run instanceof RequestMeasurement && $run->answeredWithThePage()) {
+                $times[] = $result->medianWallMs();
+            }
+        }
+
+        if (count($times) < 3) {
+            return null;
+        }
+
+        sort($times);
+        $middle = intdiv(count($times), 2);
+
+        return count($times) % 2 === 1
+            ? $times[$middle]
+            : ($times[$middle - 1] + $times[$middle]) / 2;
+    }
+
+    /**
      * @param  list<PageResult>  $results
      * @param  list<MeasurableRoute>  $skipped
      */
@@ -38,6 +74,7 @@ final readonly class PageReport
         private array $skipped,
         private bool $livewireTimingAvailable,
         private string $filter = '',
+        private int $watchdogSeconds = 15,
     ) {}
 
     /**
@@ -69,6 +106,14 @@ final readonly class PageReport
             'Coverage' => $this->filter === ''
                 ? sprintf('%d measured · %d not requestable, each with a reason · %d could not be measured', count($this->results) - $failures, count($this->skipped), $failures)
                 : sprintf('FILTERED to "%s" — %d measured. This is NOT a sweep of the application.', $this->filter, count($this->results) - $failures),
+            // A guard that is off must say so. Silence about a watchdog reads
+            // as an armed one, and the whole point of it is what happens when
+            // nobody is watching the terminal.
+            'Watchdog' => match (true) {
+                ! Watchdog::available() => 'OFF — ext-pcntl is absent, so a page with a loop will hang this sweep',
+                $this->watchdogSeconds <= 0 => 'OFF by --timeout=0 — a page with a loop will hang this sweep',
+                default => sprintf('%d s per page — over that is reported as a loop, not as slowness', $this->watchdogSeconds),
+            },
             'Budgets' => 'NOT evaluated here — they are calibrated on the seeded fixture, this reads live data',
             'Not measured' => 'network, TLS, browser render, opcache-warm production, concurrency, mutations',
         ];
@@ -122,7 +167,7 @@ final readonly class PageReport
                 // evidence-first ranking — which reads as the healthiest pages
                 // in the application.
                 $run->answeredWithThePage()
-                    ? implode(' · ', $result->diagnosis()->labels())
+                    ? implode(' · ', $result->diagnosis($this->runMedianMs())->labels())
                     : sprintf('NOT THE PAGE — answered %d', $run->status),
             ];
         }, $sorted);
@@ -233,11 +278,11 @@ final readonly class PageReport
 
         // A 404 is not a fast page; it is not the page. Nothing measured on a
         // non-2xx response says anything about the route it was requested for.
-        if (! $run instanceof RequestMeasurement || ! $run->answeredWithThePage() || $result->diagnosis()->isOk()) {
+        if (! $run instanceof RequestMeasurement || ! $run->answeredWithThePage() || $result->diagnosis($this->runMedianMs())->isOk()) {
             return [];
         }
 
-        $labels = $result->diagnosis()->labels();
+        $labels = $result->diagnosis($this->runMedianMs())->labels();
         $defects = PageDiagnosis::DEFECTS;
         $found = [];
 
@@ -254,6 +299,23 @@ final readonly class PageReport
                 'finding' => 'n-plus-one',
                 'evidence' => sprintf('%d distinct bindings · %s', $loop['distinct_bindings'], mb_strimwidth($loop['sql'], 0, 44, '…')),
                 'where' => $loop['location'] ?? '',
+            ];
+        }
+
+        if (in_array('runaway', $labels, true)) {
+            $median = $this->runMedianMs() ?? 0.0;
+            $found[] = [
+                'finding' => 'runaway',
+                // No file, deliberately. Every other finding names one because a
+                // query or a component reported its own call site. Nothing
+                // reports a loop, so pointing anywhere would be a guess.
+                'evidence' => sprintf(
+                    '%.0f ms — %.0fx the run median of %.1f ms, with no query, vendor call or component to explain it. Read the controller.',
+                    $result->medianWallMs(),
+                    $result->medianWallMs() / max($median, 0.01),
+                    $median,
+                ),
+                'where' => '',
             ];
         }
 
