@@ -33,6 +33,14 @@ return [
      * A sweep without this ranks pages by visit order and calls it cost.
      */
     'warmup' => 1,
+
+    /*
+     * The memory floor of one sweep. Every page is measured in this one process, and the views, the query log and the
+     * Livewire profile of ~200 pages do not fit PHP's CLI default of 128M (measured on ThemeVault, 2026-11-06: 194
+     * pages ended in "Allowed memory size of 134217728 bytes exhausted"). A higher limit, or -1, is kept; null or ''
+     * leaves the limit as it is.
+     */
+    'memory_limit' => env('PAGE_PERFORMANCE_MEMORY_LIMIT', '1G'),
     'iterations' => 5,
 
     /*

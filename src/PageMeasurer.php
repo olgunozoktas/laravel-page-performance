@@ -136,7 +136,7 @@ final class PageMeasurer
             $this->records[] = [
                 'sql' => $query->sql,
                 'bindings' => QueryDigest::bindingKey($query->bindings),
-                'ms' => $query->time,
+                'ms' => (float) ($query->time ?? 0.0),
                 'location' => $this->callSite(),
             ];
         });

@@ -54,6 +54,8 @@ final class MeasurePages extends Command
             return self::FAILURE;
         }
 
+        $this->raiseMemoryLimit();
+
         $routes = $this->routes();
 
         if ($routes === []) {
@@ -250,5 +252,21 @@ final class MeasurePages extends Command
         }
 
         return stream_isatty($output->getStream());
+    }
+
+    /** Raise the memory limit to `page-performance.memory_limit`, never lower it (-1 and a higher limit are kept). */
+    private function raiseMemoryLimit(): void
+    {
+        $floor = config('page-performance.memory_limit');
+
+        if (! is_string($floor) || $floor === '') {
+            return;
+        }
+
+        $current = ini_parse_quantity((string) ini_get('memory_limit'));
+
+        if ($current !== -1 && $current < ini_parse_quantity($floor)) {
+            ini_set('memory_limit', $floor);
+        }
     }
 }
