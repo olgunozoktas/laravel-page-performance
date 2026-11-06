@@ -177,6 +177,10 @@ meaningless.
   `child-heavy`. The report prints a `WARN` line then. Act on a time finding
   only after `php -d opcache.enable_cli=1 artisan perf:pages …` on a quiet
   machine (`uptime` first). Sizes and query counts do not change.
+- **A time is only as true as the machine is quiet.** A `WARN` line says the
+  1-minute load was over the core count when the run started: then every time
+  is noise (2026-11-07: load 22 to 49 on 12 cores, a 47% to 175% spread).
+  Run again when `uptime` shows a load under the core count.
 - **Parameterised routes are excluded and counted**, because a guessed id
   answers 404 in about 3 ms and would rank as the fastest page.
 - **Mutating verbs are never swept.** A sweep that fired a DELETE changed the

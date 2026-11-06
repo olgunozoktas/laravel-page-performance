@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\Auth;
 use Olgun\PagePerformance\LivewireProfile;
+use Olgun\PagePerformance\LoadState;
 use Olgun\PagePerformance\MeasurableRoute;
 use Olgun\PagePerformance\PageMeasurer;
 use Olgun\PagePerformance\PageReport;
@@ -64,6 +65,9 @@ final class MeasurePages extends Command
             return 2;
         }
 
+        // Before the first page: the load that the measurement itself makes must not count.
+        $load = app(LoadState::class)->measured();
+
         $measurer = new PageMeasurer(
             warmup: config()->integer('page-performance.warmup', 1),
             iterations: max(1, (int) $this->option('repeat')),
@@ -85,6 +89,7 @@ final class MeasurePages extends Command
             LivewireProfile::available(),
             is_string($only) ? $only : '',
             watchdogSeconds: (int) $this->option('timeout'),
+            loadState: $load,
         );
 
         if ($this->option('json') === true) {
@@ -156,12 +161,12 @@ final class MeasurePages extends Command
         }
 
         // Before the table: a reader takes the times as the server's unless told otherwise.
-        $warning = $report->opcacheWarning();
-
-        if ($warning !== null) {
-            // line(), not components->warn(): warn() wraps at the terminal width and breaks the command in two.
-            $this->newLine();
-            $this->line(sprintf('  <bg=yellow;fg=black> WARN </> %s', $warning));
+        foreach ([$report->opcacheWarning(), $report->loadWarning()] as $warning) {
+            if ($warning !== null) {
+                // line(), not components->warn(): warn() wraps at the terminal width and breaks the command in two.
+                $this->newLine();
+                $this->line(sprintf('  <bg=yellow;fg=black> WARN </> %s', $warning));
+            }
         }
 
         $this->newLine();
