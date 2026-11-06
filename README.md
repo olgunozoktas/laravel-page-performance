@@ -32,22 +32,15 @@ benchmark written to make a point.
 
 ## Install
 
-**Not on Packagist yet.** Add the repository, then require it:
-
-```jsonc
-// composer.json
-"repositories": [
-    { "type": "vcs", "url": "https://github.com/olgunozoktas/laravel-page-performance" }
-]
-```
+From [Packagist](https://packagist.org/packages/olgunozoktas/laravel-page-performance):
 
 ```bash
-composer require --dev olgunozoktas/laravel-page-performance:^0.1
+composer require --dev olgunozoktas/laravel-page-performance
 php artisan vendor:publish --tag=page-performance-config
 ```
 
-Once it is listed on Packagist the `repositories` entry becomes unnecessary and
-`composer require --dev olgunozoktas/laravel-page-performance` is enough.
+It is a development tool: install it with `--dev`. `perf:pages` refuses to run
+in production.
 
 Livewire is **optional**. Without it you get every page-level number; with it you
 also get per-component render timing and snapshot payload bytes.
