@@ -240,6 +240,14 @@ per-session state, and only a page carrying none is worth questioning.
   ship. It refuses to run against production.
 - **It never writes.** GET routes only; mutating verbs are excluded
   structurally, not by a list somebody maintains.
+- **Times depend on opcache in the CLI.** PHP's CLI default is
+  `opcache.enable_cli=0`, and then every render compiles the views again.
+  Measured on a Livewire app (2026-11-07): one component took 15.9 ms with it
+  off and 6.7 ms with it on, and only the run with it off reported
+  `child-heavy`. When it is off, the report prints a `WARN` line before the
+  table (and `opcache_warning` in `--json`). Sizes and query counts do not
+  change. For a time finding, run
+  `php -d opcache.enable_cli=1 artisan perf:pages …` on a quiet machine.
 - **Parameterised routes are excluded and counted.** A guessed id answers 404 in
   about 3 ms and would rank as the fastest page in the application.
 

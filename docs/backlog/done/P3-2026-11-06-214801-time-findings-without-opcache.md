@@ -3,6 +3,7 @@
 Created: 2026-11-07 (UTC)
 Priority: **P3**
 Tags: idea, accuracy
+Done: 2026-11-07 — OpcacheState; a WARN line before the table and `opcache_warning` in --json. The labels stay as they are (the line tells how to read the times). Tests: OpcacheWarningTest, both positions.
 Status legend: `- [ ]` = to do, `- [x]` = implemented
 
 ## Context
@@ -16,10 +17,10 @@ Status legend: `- [ ]` = to do, `- [x]` = implemented
 
 ## Items
 
-- [ ] Read `ini_get('opcache.enable_cli')` and `function_exists('opcache_get_status')` at the start of a run.
-- [ ] When opcache is off in the CLI, print one line before the table: the times include view compilation, and the
+- [x] Read `ini_get('opcache.enable_cli')` and `function_exists('opcache_get_status')` at the start of a run.
+- [x] When opcache is off in the CLI, print one line before the table: the times include view compilation, and the
       command to run with it on (`php -d opcache.enable_cli=1 artisan perf:pages …`).
-- [ ] Decide (and test both ways): mark the time-based labels (child-heavy, livewire-bound, slow) as "without opcache",
+- [x] Decide (and test both ways): mark the time-based labels (child-heavy, livewire-bound, slow) as "without opcache",
       or keep them and rely on the line.
 
 ## Acceptance

@@ -75,7 +75,19 @@ final readonly class PageReport
         private bool $livewireTimingAvailable,
         private string $filter = '',
         private int $watchdogSeconds = 15,
+        private ?OpcacheState $opcache = null,
     ) {}
+
+    /** The warning that opcache is off in the measuring CLI, or null when it is on (`OpcacheState`). */
+    public function opcacheWarning(): ?string
+    {
+        return $this->opcacheState()->warning();
+    }
+
+    private function opcacheState(): OpcacheState
+    {
+        return $this->opcache ?? app(OpcacheState::class);
+    }
 
     /**
      * @return array<string, string>
@@ -94,7 +106,7 @@ final readonly class PageReport
             'Runtime' => sprintf(
                 'PHP %s · opcache %s · APP_DEBUG=%s · Livewire phase timing %s',
                 PHP_VERSION,
-                function_exists('opcache_get_status') && is_array(@opcache_get_status(false)) ? 'on' : 'off',
+                $this->opcacheState()->enabled() ? 'on' : 'off',
                 config()->boolean('app.debug') ? 'true' : 'false',
                 $this->livewireTimingAvailable ? 'ON' : 'OFF — '.LivewireProfile::unavailableReason(),
             ),
@@ -453,6 +465,7 @@ final readonly class PageReport
     {
         return [
             'conditions' => $this->conditions(),
+            'opcache_warning' => $this->opcacheWarning(),
             'columns' => self::COLUMNS,
             'rows' => $this->rows(),
             'finding_columns' => self::FINDING_COLUMNS,
