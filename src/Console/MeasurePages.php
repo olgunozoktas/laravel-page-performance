@@ -155,6 +155,15 @@ final class MeasurePages extends Command
             $this->components->twoColumnDetail(sprintf('<options=bold>%s</>', $label), $value);
         }
 
+        // Before the table: a reader takes the times as the server's unless told otherwise.
+        $warning = $report->opcacheWarning();
+
+        if ($warning !== null) {
+            // line(), not components->warn(): warn() wraps at the terminal width and breaks the command in two.
+            $this->newLine();
+            $this->line(sprintf('  <bg=yellow;fg=black> WARN </> %s', $warning));
+        }
+
         $this->newLine();
         $this->table(PageReport::COLUMNS, $report->rows());
 
