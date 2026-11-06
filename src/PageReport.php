@@ -76,7 +76,14 @@ final readonly class PageReport
         private string $filter = '',
         private int $watchdogSeconds = 15,
         private ?OpcacheState $opcache = null,
+        private ?LoadState $loadState = null,
     ) {}
+
+    /** The warning that the machine was busy when the run started, or null (`LoadState`). */
+    public function loadWarning(): ?string
+    {
+        return ($this->loadState ?? app(LoadState::class))->warning();
+    }
 
     /** The warning that opcache is off in the measuring CLI, or null when it is on (`OpcacheState`). */
     public function opcacheWarning(): ?string
@@ -466,6 +473,7 @@ final readonly class PageReport
         return [
             'conditions' => $this->conditions(),
             'opcache_warning' => $this->opcacheWarning(),
+            'load_warning' => $this->loadWarning(),
             'columns' => self::COLUMNS,
             'rows' => $this->rows(),
             'finding_columns' => self::FINDING_COLUMNS,

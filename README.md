@@ -248,6 +248,12 @@ per-session state, and only a page carrying none is worth questioning.
   table (and `opcache_warning` in `--json`). Sizes and query counts do not
   change. For a time finding, run
   `php -d opcache.enable_cli=1 artisan perf:pages …` on a quiet machine.
+- **Times depend on a quiet machine.** The command reads the 1-minute load
+  and the core count before the first page. When the load is over the core
+  count, it prints a `WARN` line before the table (and `load_warning` in
+  `--json`). Measured on a Livewire app (2026-11-07): every run of one evening
+  started at a load of 22 to 49 on a 12-core Mac, and the same page spread
+  47% to 175% between runs. Sizes and query counts do not change.
 - **Parameterised routes are excluded and counted.** A guessed id answers 404 in
   about 3 ms and would rank as the fastest page in the application.
 
