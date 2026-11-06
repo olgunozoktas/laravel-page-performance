@@ -264,6 +264,12 @@ php artisan perf:pages --json
 Exit codes: `0` measured · `2` nothing could be measured, which is **not** a
 pass · non-zero on bad usage.
 
+A sweep measures every page in one process. The command raises PHP's memory
+limit to `page-performance.memory_limit` (default `1G`,
+`PAGE_PERFORMANCE_MEMORY_LIMIT`) before it starts, and never lowers it. Measured
+on a Livewire directory app (2026-11-06): 194 pages ran out of the CLI default
+of 128M. Set it to `''` to leave the limit as it is.
+
 ## The agent skill
 
 The repository ships a skill at `.claude/skills/page-performance/SKILL.md`. Copy
