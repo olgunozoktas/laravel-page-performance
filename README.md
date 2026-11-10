@@ -273,9 +273,9 @@ pass · non-zero on bad usage.
 
 A sweep measures every page in one process. The command raises PHP's memory
 limit to `page-performance.memory_limit` (default `1G`,
-`PAGE_PERFORMANCE_MEMORY_LIMIT`) before it starts, and never lowers it. Measured
-on a Livewire directory app (2026-11-06): 194 pages ran out of the CLI default
-of 128M. Set it to `''` to leave the limit as it is.
+`PAGE_PERFORMANCE_MEMORY_LIMIT`) before it starts, and never lowers it. A sweep
+of 194 pages of a Livewire application ran out of the CLI default of 128M. Set
+it to `''` to leave the limit as it is.
 
 ## The agent skill
 
