@@ -2,6 +2,7 @@
 
 Created: 2026-11-10 (UTC)
 Priority: **P3**
+GitHub Issue: [#9](https://github.com/olgunozoktas/laravel-page-performance/issues/9)
 Tags: idea, back-end
 Need: 46 GET routes of a Laravel 13 host app were "not requestable" because they take a route parameter, and 10 of
 them were its main signed-in pages (sites, reports, workspaces): `php artisan perf:pages --json`, the `skipped`
