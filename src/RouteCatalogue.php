@@ -15,9 +15,10 @@ use Illuminate\Support\Facades\Route;
  * in every parameter because it asserts a REFUSAL — a 404 is the pass. A
  * latency sweep needs a 200: a 404 answers in about 3 ms and would rank as the
  * fastest page in the application, so a parameterised route is excluded and
- * COUNTED rather than guessed at.
+ * COUNTED rather than guessed at — unless the host names its values
+ * (`page-performance.parameters` or `--param`; see RouteParameters).
  *
- * ONLY GET, AND ONLY WITHOUT PARAMETERS. A sweep that fired a DELETE would have
+ * ONLY GET, AND ONLY WITH EVERY PARAMETER KNOWN. A sweep that fired a DELETE would have
  * changed the thing it was measuring, so the mutating verbs are excluded
  * structurally rather than by a list somebody has to maintain.
  *
@@ -35,9 +36,13 @@ final readonly class RouteCatalogue
     public function __construct(
         private array $include = [],
         private array $exclude = [],
+        private RouteParameters $parameters = new RouteParameters,
     ) {}
 
-    public static function fromConfig(): self
+    /**
+     * @param  list<string>  $parameterOptions  each `route.name:parameter=value` (the `--param` option)
+     */
+    public static function fromConfig(array $parameterOptions = []): self
     {
         /** @var list<string> $include */
         $include = config()->array('page-performance.include', []);
@@ -45,7 +50,7 @@ final readonly class RouteCatalogue
         /** @var array<string, string> $exclude */
         $exclude = config()->array('page-performance.exclude', []);
 
-        return new self($include, $exclude);
+        return new self($include, $exclude, RouteParameters::fromConfig($parameterOptions));
     }
 
     /**
@@ -106,7 +111,16 @@ final readonly class RouteCatalogue
         }
 
         if (str_contains($uri, '{')) {
-            return MeasurableRoute::skipped($name, $uri, 'Takes a route parameter. A guessed value answers 404, which would rank as the fastest page here.');
+            $filled = $this->parameters->fill($name, $uri);
+
+            if ($filled['missing'] !== []) {
+                return MeasurableRoute::skipped($name, $uri, sprintf(
+                    'Takes a route parameter (%s) with no value given. A guessed value answers 404, which would rank as the fastest page here. Name a value in page-performance.parameters or with --param.',
+                    implode(', ', $filled['missing']),
+                ));
+            }
+
+            return MeasurableRoute::filled($name, $filled['uri']);
         }
 
         return MeasurableRoute::measurable($name, $uri);

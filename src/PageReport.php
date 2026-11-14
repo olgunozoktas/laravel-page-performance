@@ -164,11 +164,11 @@ final readonly class PageReport
             $run = $result->representative();
 
             if (! $run instanceof RequestMeasurement) {
-                return [$result->route->name, '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', 'COULD NOT MEASURE: '.$result->failure];
+                return [$result->route->label(), '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', 'COULD NOT MEASURE: '.$result->failure];
             }
 
             return [
-                $result->route->name,
+                $result->route->label(),
                 (string) $run->status,
                 sprintf('%.1f', $result->medianWallMs()),
                 sprintf('%.0f%%', $result->spreadPercent()),
@@ -244,7 +244,7 @@ final readonly class PageReport
                 $key = $finding['finding'].'|'.$finding['evidence'].'|'.$finding['where'];
 
                 $groups[$key] ??= [...$finding, 'pages' => []];
-                $groups[$key]['pages'][] = $result->route->name;
+                $groups[$key]['pages'][] = $result->route->label();
             }
         }
 
@@ -281,7 +281,7 @@ final readonly class PageReport
 
         foreach ($this->sorted() as $result) {
             foreach ($this->findingsFor($result) as $finding) {
-                $groups[$finding['finding'].' · '.$finding['evidence']][] = $result->route->name;
+                $groups[$finding['finding'].' · '.$finding['evidence']][] = $result->route->label();
             }
         }
 
