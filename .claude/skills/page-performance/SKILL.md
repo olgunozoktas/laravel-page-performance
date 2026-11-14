@@ -10,11 +10,12 @@ guessing is wrong often enough to waste days, and the tool it describes was
 built after exactly that happened.
 
 ```bash
-php artisan perf:pages                     # every parameterless GET route
+php artisan perf:pages                     # every GET route whose parameters are known
 php artisan perf:pages --only=board        # substring filter on the route name
 php artisan perf:pages --as=me@example.com # include authenticated pages
 php artisan perf:pages --shuffle           # if the ranking changes, it is noise
 php artisan perf:pages --open=3            # open finding 3 in your editor
+php artisan perf:pages --param=posts.show:post=hello-world  # a value for a route parameter (repeatable)
 php artisan perf:pages --json
 ```
 
@@ -181,8 +182,11 @@ meaningless.
   1-minute load was over the core count when the run started: then every time
   is noise (2026-11-07: load 22 to 49 on 12 cores, a 47% to 175% spread).
   Run again when `uptime` shows a load under the core count.
-- **Parameterised routes are excluded and counted**, because a guessed id
-  answers 404 in about 3 ms and would rank as the fastest page.
+- **Parameterised routes are excluded and counted until the host names their
+  values**, because a guessed id answers 404 in about 3 ms and would rank as
+  the fastest page. Name the values in `page-performance.parameters`
+  (`'posts.show' => ['post' => 'hello-world']`) or with `--param` for one run;
+  a value whose row is gone shows as NOT THE PAGE.
 - **Mutating verbs are never swept.** A sweep that fired a DELETE changed the
   thing it measured.
 - **It reads the real local database and refuses to run in production.**

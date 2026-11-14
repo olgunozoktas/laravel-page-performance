@@ -19,6 +19,7 @@ final readonly class MeasurableRoute
         public string $uri,
         public bool $measurable,
         public string $skipReason,
+        public bool $filled = false,
     ) {}
 
     public static function measurable(string $name, string $uri): self
@@ -26,9 +27,27 @@ final readonly class MeasurableRoute
         return new self($name, $uri, true, '');
     }
 
+    /**
+     * A route whose parameters got the values that the host named: `$uri` is
+     * the filled address.
+     */
+    public static function filled(string $name, string $uri): self
+    {
+        return new self($name, $uri, true, '', true);
+    }
+
     public static function skipped(string $name, string $uri, string $reason): self
     {
         return new self($name, $uri, false, $reason);
+    }
+
+    /**
+     * The name in a report. A filled route also shows its address, because
+     * the value decides which page was measured.
+     */
+    public function label(): string
+    {
+        return $this->filled ? $this->name.' '.$this->path() : $this->name;
     }
 
     public function path(): string
