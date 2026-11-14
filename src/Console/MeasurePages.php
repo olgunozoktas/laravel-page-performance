@@ -7,6 +7,7 @@ namespace Olgun\PagePerformance\Console;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\Auth;
+use InvalidArgumentException;
 use Olgun\PagePerformance\LivewireProfile;
 use Olgun\PagePerformance\LoadState;
 use Olgun\PagePerformance\MeasurableRoute;
@@ -20,8 +21,9 @@ use Symfony\Component\Console\Output\StreamOutput;
 /**
  * What does each page cost, and why?
  *
- * READ-ONLY, AND IT REFUSES TO RUN IN PRODUCTION. It requests GET routes with
- * no parameters, so nothing it does can change what it is measuring.
+ * READ-ONLY, AND IT REFUSES TO RUN IN PRODUCTION. It requests GET routes only
+ * (with no parameters, or with the values the host names), so nothing it does
+ * can change what it is measuring.
  *
  * IT MEASURES THE REAL LOCAL DATABASE, NOT THE TEST FIXTURE, and that is the
  * decision that makes it worth running. On an empty database the board home
@@ -40,12 +42,13 @@ final class MeasurePages extends Command
         {--as= : Sign in as this local user (id or email) so authenticated pages are measured}
         {--repeat=5 : Timed iterations per page; the first is always discarded}
         {--only= : Substring filter on the route name}
+        {--param=* : A value for a route parameter, as route.name:parameter=value (repeatable; wins over page-performance.parameters)}
         {--shuffle : Randomise page order, so an ordering effect becomes visible}
         {--timeout=15 : Seconds one page may take before it is called a loop; 0 switches the watchdog off}
         {--open= : Open finding N in the configured editor (for terminals with no clickable links)}
         {--json : Machine-readable report}';
 
-    protected $description = 'Measure every parameterless GET page and report what it costs, worst first';
+    protected $description = 'Measure every GET page whose parameters are known and report what it costs, worst first';
 
     public function handle(): int
     {
@@ -57,7 +60,15 @@ final class MeasurePages extends Command
 
         $this->raiseMemoryLimit();
 
-        $routes = $this->routes();
+        try {
+            $catalogue = RouteCatalogue::fromConfig($this->parameterOptions());
+        } catch (InvalidArgumentException $invalid) {
+            $this->components->error($invalid->getMessage());
+
+            return self::INVALID;
+        }
+
+        $routes = $this->routes($catalogue);
 
         if ($routes === []) {
             $this->components->error('No measurable routes matched. Nothing was measured, which is NOT a pass.');
@@ -85,7 +96,7 @@ final class MeasurePages extends Command
 
         $report = new PageReport(
             $results,
-            RouteCatalogue::fromConfig()->skipped(),
+            $catalogue->skipped(),
             LivewireProfile::available(),
             is_string($only) ? $only : '',
             watchdogSeconds: (int) $this->option('timeout'),
@@ -106,9 +117,9 @@ final class MeasurePages extends Command
     /**
      * @return list<MeasurableRoute>
      */
-    private function routes(): array
+    private function routes(RouteCatalogue $catalogue): array
     {
-        $routes = RouteCatalogue::fromConfig()->measurable();
+        $routes = $catalogue->measurable();
 
         $only = $this->option('only');
 
@@ -121,6 +132,16 @@ final class MeasurePages extends Command
         }
 
         return $routes;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function parameterOptions(): array
+    {
+        $options = $this->option('param');
+
+        return is_array($options) ? array_values(array_filter($options, is_string(...))) : [];
     }
 
     /**

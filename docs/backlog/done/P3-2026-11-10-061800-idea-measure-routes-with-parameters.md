@@ -19,14 +19,14 @@ Status legend: `- [ ]` = to do, `- [x]` = implemented
 
 ## Items
 
-- [ ] An option that gives a route its parameter values, e.g. `--param=sites.show:site=<value>`, or a config map
+- [x] An option that gives a route its parameter values, e.g. `--param=sites.show:site=<value>`, or a config map
       `page-performance.parameters` (`route name => [parameter => value]`).
 - [ ] Optionally: a resolver per parameter, e.g. "the first row of the bound model that `--as` can see", off by
-      default.
-- [ ] A route with values given is measured as any other page; a route without them stays skipped with today's
+      default. Not built: the config map and `--param` cover the need; a new item if a host asks for it.
+- [x] A route with values given is measured as any other page; a route without them stays skipped with today's
       reason.
-- [ ] A measured page that answers 404 or 403 is reported as "NOT THE PAGE", as the 404 rows are now, never ranked.
-- [ ] README: the option, with one example.
+- [x] A measured page that answers 404 or 403 is reported as "NOT THE PAGE", as the 404 rows are now, never ranked.
+- [x] README: the option, with one example.
 
 ## Acceptance
 
@@ -39,3 +39,15 @@ Status legend: `- [ ]` = to do, `- [x]` = implemented
 
 - A value from the config can point at a row that a later seed removes: the 404 rule above makes that visible.
 - An automatic resolver reads the database to pick a row; keep it off by default.
+
+## Shipped
+
+- **What:** the config map `page-performance.parameters` (`route name => [parameter => value]`) and the repeatable
+  option `--param=route.name:parameter=value`, which wins over the config for one run. A route with every required
+  parameter given is measured; its row shows the name and the filled address. A route without a value stays skipped,
+  and the reason names the parameters it lacks. A value that answers 404 shows as NOT THE PAGE. An optional parameter
+  without a value is left out of the address. A `--param` in another form stops the command with exit 2.
+- **How:** `src/RouteParameters.php` (new), `RouteCatalogue`, `MeasurableRoute::filled()` and `label()`, the command.
+- **Tests:** `vendor/bin/pest tests/Feature/RouteParametersTest.php`: 13 passed (27 assertions). Each guard was broken
+  once, and a named test failed each time.
+- **Why:** pages with a parameter (a record's page, a tag page) shipped with no query count and no Defect check.

@@ -26,6 +26,20 @@ return [
     'exclude' => [],
 
     /*
+     * Values for the routes that take a parameter. A route with a parameter is
+     * skipped until every required parameter has a value here (or from
+     * `--param=route.name:parameter=value`, which wins for one run). The
+     * package never guesses a value: a guessed value answers 404, and a 404
+     * would rank as the fastest page.
+     *
+     * Each entry: 'posts.show' => ['post' => 'hello-world'].
+     *
+     * The values point at rows of the local database. A value whose row is
+     * gone answers 404, and the report shows that page as NOT THE PAGE.
+     */
+    'parameters' => [],
+
+    /*
      * Iterations per page. The FIRST is always discarded and reported
      * separately as `cold`, because the first request handled in a PHP process
      * costs a fixed amount — measured at about 90 ms on one real application,

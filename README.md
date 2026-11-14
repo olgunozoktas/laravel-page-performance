@@ -2,7 +2,7 @@
 
 **Measure what every page actually costs, and say what to fix.**
 
-`php artisan perf:pages` walks every parameterless GET route, warms the process,
+`php artisan perf:pages` walks every GET route whose parameters are known, warms the process,
 measures N in-process requests, and prints a table ordered worst-first where
 every row carries a **diagnosis** rather than a number.
 
@@ -254,8 +254,13 @@ per-session state, and only a page carrying none is worth questioning.
   `--json`). Measured on a Livewire app (2026-11-07): every run of one evening
   started at a load of 22 to 49 on a 12-core Mac, and the same page spread
   47% to 175% between runs. Sizes and query counts do not change.
-- **Parameterised routes are excluded and counted.** A guessed id answers 404 in
-  about 3 ms and would rank as the fastest page in the application.
+- **Parameterised routes are excluded and counted, until you name their
+  values.** A guessed id answers 404 in about 3 ms and would rank as the
+  fastest page in the application, so the package never guesses. Give a route
+  its values in `page-performance.parameters` or with `--param` (see Commands);
+  a route without them stays in the skipped list, with the parameters it
+  lacks. A value whose row is gone answers 404, and the page is reported as
+  NOT THE PAGE, never ranked.
 
 ## Commands
 
@@ -265,8 +270,23 @@ php artisan perf:pages --only=board        # substring filter on the route name
 php artisan perf:pages --repeat=9          # more iterations
 php artisan perf:pages --shuffle           # if the ranking changes, it is noise
 php artisan perf:pages --as=me@example.com # measure authenticated pages
+php artisan perf:pages --param=posts.show:post=hello-world  # a value for a route parameter
 php artisan perf:pages --json
 ```
+
+`--param` is repeatable, in the form `route.name:parameter=value`, and wins
+over the config for one run. To measure a page with a parameter on every run,
+name its values in the published config:
+
+```php
+// config/page-performance.php
+'parameters' => [
+    'posts.show' => ['post' => 'hello-world'],
+    'users.posts.show' => ['user' => '1', 'post' => 'hello-world'],
+],
+```
+
+An optional parameter (`{page?}`) without a value is left out of the address.
 
 Exit codes: `0` measured · `2` nothing could be measured, which is **not** a
 pass · non-zero on bad usage.
