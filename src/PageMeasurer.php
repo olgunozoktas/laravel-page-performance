@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
@@ -32,8 +33,10 @@ use Throwable;
  * and the page worth measuring is the one after the hop. More than one hop is
  * not followed: a chain is a finding of its own, not something to measure past.
  *
- * IT NEVER WRITES. GET only, and the command refuses to run in production. The
- * query log records SHAPES and a location; bindings are hashed by
+ * A PAGE NEVER WRITES. `perf:pages` sends GET only, and both commands refuse to
+ * run in production. A named request of `perf:requests` may write: it runs
+ * only with a {@see RequestSandbox}, which rolls each run back and refuses each
+ * outbound call. The query log records SHAPES and a location; bindings are hashed by
  * {@see QueryDigest} before anything is kept, because a binding is a payer's
  * name or email and this output reaches a report file and a terminal.
  */
@@ -62,9 +65,35 @@ final class PageMeasurer
         private int $iterations = 5,
         private ?Authenticatable $actingAs = null,
         private ?Watchdog $watchdog = null,
+        private ?RequestSandbox $sandbox = null,
     ) {}
 
     public function measure(MeasurableRoute $route): PageResult
+    {
+        return $this->measureAs($route, MeasurableRequest::page($route->name, $route->path()));
+    }
+
+    /**
+     * One named request of `perf:requests`, with the values of the fixture.
+     *
+     * ITS BUDGET IS JUDGED, unlike a page's. The request runs on the rows that
+     * the host's fixture makes, which is the fixture that its budget is
+     * measured on, so `query-heavy` and `unbudgeted` mean something here.
+     *
+     * @param  array<string, string|int|float|bool>  $values
+     */
+    public function measureRequest(MeasurableRequest $request, array $values = [], ?int $queryBudget = null, bool $budgetsApply = false): PageResult
+    {
+        try {
+            $resolved = $request->resolve($values);
+        } catch (InvalidArgumentException $invalid) {
+            return PageResult::failed($request->route(), Str::limit($invalid->getMessage(), 120));
+        }
+
+        return $this->measureAs($request->route(), $resolved, $queryBudget, $budgetsApply);
+    }
+
+    private function measureAs(MeasurableRoute $route, MeasurableRequest $request, ?int $queryBudget = null, bool $budgetsApply = false): PageResult
     {
         $this->outbound ??= new OutboundCalls;
 
@@ -75,17 +104,17 @@ final class PageMeasurer
             $cold = 0.0;
 
             for ($i = 0; $i < max(1, $this->warmup); $i++) {
-                $warm = $this->once($route->path(), $profile);
+                $warm = $this->once($request, $profile);
                 $cold = $i === 0 ? $warm->wallMs : $cold;
             }
 
             $runs = [];
 
             for ($i = 0; $i < max(1, $this->iterations); $i++) {
-                $runs[] = $this->once($route->path(), $profile);
+                $runs[] = $this->once($request, $profile);
             }
 
-            return new PageResult($route, $cold, $runs);
+            return new PageResult($route, $cold, $runs, queryBudget: $queryBudget, budgetsApply: $budgetsApply);
         } catch (PageTimedOut $timedOut) {
             // Named apart from the generic failure so the report can say a loop,
             // not "something went wrong". They are different problems.
@@ -142,8 +171,9 @@ final class PageMeasurer
         });
     }
 
-    private function once(string $path, LivewireProfile $profile): RequestMeasurement
+    private function once(MeasurableRequest $request, LivewireProfile $profile): RequestMeasurement
     {
+        $path = $request->path;
         $followed = null;
         $profile->reset();
         $this->listenOnce();
@@ -151,11 +181,13 @@ final class PageMeasurer
         $this->outbound->reset();
 
         $started = hrtime(true);
-        $response = $this->send($path);
+        $response = $this->send($request);
         $wallMs = (hrtime(true) - $started) / 1e6;
+        $this->refuseOutbound();
 
-        // One hop only — see the class docblock.
-        if ($response->isRedirection()) {
+        // One hop only — see the class docblock. A write is not followed: its
+        // redirect is the answer, and the next page is a GET of its own.
+        if ($response->isRedirection() && $request->method === 'GET') {
             $location = (string) $response->headers->get('Location');
             $next = parse_url($location, PHP_URL_PATH);
 
@@ -169,8 +201,9 @@ final class PageMeasurer
                 $this->records = [];
                 $profile->reset();
                 $started = hrtime(true);
-                $response = $this->send($next);
+                $response = $this->send($request->withPath($next));
                 $wallMs = (hrtime(true) - $started) / 1e6;
+                $this->refuseOutbound();
             }
         }
 
@@ -194,13 +227,29 @@ final class PageMeasurer
         );
     }
 
-    private function send(string $path): Response
+    /**
+     * A named request may not call out: its row fails, and the call never left.
+     *
+     * The sandbox turned on `Http::preventStrayRequests()`, so Laravel's client
+     * threw before it sent and the kernel rendered a 500. That 500 alone would
+     * read as a broken request; the row names the call instead.
+     */
+    private function refuseOutbound(): void
+    {
+        if ($this->sandbox instanceof RequestSandbox && $this->outbound->count() > 0) {
+            throw new RuntimeException('outbound call refused: '.$this->outbound->summary());
+        }
+    }
+
+    private function send(MeasurableRequest $request): Response
     {
         $watchdog = $this->watchdog ??= new Watchdog;
         $watchdog->arm();
 
         try {
-            $response = $this->handle($path);
+            $response = $this->sandbox instanceof RequestSandbox
+                ? $this->sandbox->isolate(fn (): Response => $this->handle($request))
+                : $this->handle($request);
         } finally {
             $watchdog->disarm();
         }
@@ -213,9 +262,10 @@ final class PageMeasurer
         return $response;
     }
 
-    private function handle(string $path): Response
+    private function handle(MeasurableRequest $measurable): Response
     {
-        $request = Request::create($path, 'GET');
+        // A page has no header and no body: the same request as before.
+        $request = Request::create($measurable->path, $measurable->method, server: $measurable->server(), content: $measurable->content());
 
         if ($this->actingAs instanceof Authenticatable) {
             Auth::guard('web')->setUser($this->actingAs);
