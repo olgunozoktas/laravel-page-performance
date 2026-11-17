@@ -68,6 +68,7 @@ final readonly class PageReport
     /**
      * @param  list<PageResult>  $results
      * @param  list<MeasurableRoute>  $skipped
+     * @param  bool  $requests  true for the named requests of `perf:requests` ({@see RequestConditions})
      */
     public function __construct(
         private array $results,
@@ -77,7 +78,18 @@ final readonly class PageReport
         private int $watchdogSeconds = 15,
         private ?OpcacheState $opcache = null,
         private ?LoadState $loadState = null,
+        private bool $requests = false,
     ) {}
+
+    /**
+     * The table header: a named request is a `request`, a page is a `page`.
+     *
+     * @return list<string>
+     */
+    public function columns(): array
+    {
+        return $this->requests ? ['request', ...array_slice(self::COLUMNS, 1)] : self::COLUMNS;
+    }
 
     /** The warning that the machine was busy when the run started, or null (`LoadState`). */
     public function loadWarning(): ?string
@@ -100,6 +112,14 @@ final readonly class PageReport
      * @return array<string, string>
      */
     public function conditions(): array
+    {
+        return $this->requests ? RequestConditions::apply($this->pageConditions()) : $this->pageConditions();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function pageConditions(): array
     {
         $failures = count(array_filter($this->results, static fn (PageResult $r): bool => ! $r->measured()));
 
@@ -474,7 +494,7 @@ final readonly class PageReport
             'conditions' => $this->conditions(),
             'opcache_warning' => $this->opcacheWarning(),
             'load_warning' => $this->loadWarning(),
-            'columns' => self::COLUMNS,
+            'columns' => $this->columns(),
             'rows' => $this->rows(),
             'finding_columns' => self::FINDING_COLUMNS,
             'findings' => $this->findingRows(new EditorLink(null, '', false)),

@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 /*
- * What `perf:pages` measures, how often, and what each page is allowed to cost.
+ * What `perf:pages` and `perf:requests` measure, how often, and what each page
+ * and named request is allowed to cost.
  *
  * Publish with:
  *   php artisan vendor:publish --tag=page-performance-config
@@ -99,8 +100,37 @@ return [
     'budgets' => [],
 
     /*
-     * Pages deliberately not budgeted, and why. `route.name => 'reason'`.
+     * Pages and named requests deliberately not budgeted, and why.
+     * `route.name => 'reason'` or `request name => 'reason'`.
      */
     'unbudgeted' => [],
+
+    /*
+     * The named requests of `perf:requests`: any method, headers and a JSON
+     * body. Each run is in a database transaction that is rolled back, and
+     * an outbound HTTP call fails the row ("outbound call") without leaving
+     * the process. A budget for a request uses its name as the key.
+     *
+     * Each entry:
+     *   'posts.store' => [
+     *       'method' => 'POST',
+     *       'path' => '/api/posts',
+     *       'headers' => ['Authorization' => 'Bearer {fixture.token}'],
+     *       'json' => ['title' => 'Hello', 'author_id' => '{fixture.user_id}'],
+     *   ],
+     *
+     * `Accept: application/json` is added when no Accept header is named, and
+     * `Content-Type: application/json` when the entry has a body.
+     */
+    'requests' => [],
+
+    /*
+     * A class that implements Olgun\PagePerformance\RequestFixture, or null.
+     * Its setUp() makes the rows the requests need (a user, an API key) in a
+     * transaction that is rolled back, and returns the values that a request
+     * names as {fixture.key}. A body value that is only the placeholder keeps
+     * the type of the value.
+     */
+    'fixture' => null,
 
 ];
