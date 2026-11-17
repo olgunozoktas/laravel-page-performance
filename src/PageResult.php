@@ -25,12 +25,16 @@ final readonly class PageResult
 {
     /**
      * @param  list<RequestMeasurement>  $runs  the timed runs, cold already excluded
+     * @param  ?int  $queryBudget  the query ceiling of a named request, or null
+     * @param  bool  $budgetsApply  true only for a named request of `perf:requests` (see `diagnosis()`)
      */
     public function __construct(
         public MeasurableRoute $route,
         public float $coldMs,
         public array $runs,
         public string $failure = '',
+        public ?int $queryBudget = null,
+        public bool $budgetsApply = false,
     ) {}
 
     public static function failed(MeasurableRoute $route, string $failure): self
@@ -111,20 +115,23 @@ final readonly class PageResult
     }
 
     /**
-     * What this page's numbers say, WITHOUT a budget verdict.
+     * What this page's numbers say, WITHOUT a budget verdict for a page.
      *
      * The sweeper reads the real database and the budgets are calibrated on the
      * seeded fixture, so a budget comparison here would be a category error —
      * see the note on `PageDiagnosis::$budgetsApply`. Whether a page is inside
      * its budget is the host's budget test's question, asked against the fixture the
      * number came from.
+     *
+     * A named request of `perf:requests` is the exception: it runs on the rows
+     * of the host's fixture, so its budget is judged (`$budgetsApply`).
      */
     public function diagnosis(?float $runMedianMs = null): PageDiagnosis
     {
         $representative = $this->representative();
 
         return $representative instanceof RequestMeasurement
-            ? $representative->diagnosis(null, budgetsApply: false, runMedianMs: $runMedianMs)
+            ? $representative->diagnosis($this->queryBudget, budgetsApply: $this->budgetsApply, runMedianMs: $runMedianMs)
             // Named, not positional: this list grows, and a bool landing in an
             // int slot is the kind of drift a compiler cannot always catch.
             : new PageDiagnosis(

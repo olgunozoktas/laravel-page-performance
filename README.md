@@ -20,6 +20,10 @@ board.home /   repeated-query · db-bound · payload-heavy
          app/Boards/PublicPages/BoardHome.php:88
 ```
 
+`php artisan perf:requests` does the same for the requests that you name: a
+POST, an API write with a key and a JSON body, a JSON-RPC call. Each run is
+rolled back (see [Requests](#requests)).
+
 A table of milliseconds tells you which page is slowest. It does not tell you
 what to open. Every finding here ends in a file and a line.
 
@@ -297,6 +301,76 @@ limit to `page-performance.memory_limit` (default `1G`,
 of 194 pages of a Livewire application ran out of the CLI default of 128M. Set
 it to `''` to leave the limit as it is.
 
+## Requests
+
+`perf:pages` sends GET only. `perf:requests` sends the requests that you name
+in the published config, with any method, headers and a JSON body, and prints
+the same report: a row for each request, the same Defects, the same `--json`.
+
+```php
+// config/page-performance.php
+'requests' => [
+    'posts.store' => [
+        'method' => 'POST',
+        'path' => '/api/posts',
+        'headers' => ['Authorization' => 'Bearer {fixture.token}'],
+        'json' => ['title' => 'Hello', 'author_id' => '{fixture.user_id}'],
+    ],
+],
+'fixture' => App\Support\PerformanceFixture::class,
+```
+
+```php
+// app/Support/PerformanceFixture.php
+use Olgun\PagePerformance\RequestFixture;
+
+final class PerformanceFixture implements RequestFixture
+{
+    public function setUp(): array
+    {
+        $user = User::factory()->create();
+
+        return ['token' => $user->createToken('perf')->plainTextToken, 'user_id' => $user->id];
+    }
+
+    public function tearDown(): void {}
+}
+```
+
+```bash
+php artisan perf:requests                  # every named request
+php artisan perf:requests --only=posts     # substring filter on the request name
+php artisan perf:requests --repeat=9 --json
+```
+
+**Nothing that it writes stays.** The fixture runs in a database transaction,
+and each run of a request in an inner transaction. Both roll back, so the
+table has no new row when the command ends. During the runs:
+
+- An outbound HTTP call through Laravel's client is refused before it is sent
+  (`Http::preventStrayRequests()`), and its row fails with `outbound call
+  refused: <host>`. A raw curl handle or an SDK with its own Guzzle is not seen.
+- Mail goes to an `array` mailer, and a queued job to a `null` queue. Both
+  settings are put back after the run.
+- A cache write, a file write and a write on a second database connection are
+  **not** rolled back. Use the `array` cache store in `setUp()` when a request
+  writes to the cache, or lifts a rate limit, and put it back in `tearDown()`.
+
+**`{fixture.key}`** in a path, a header value or a body string takes the value
+that `setUp()` returned. A body value that is only the placeholder keeps the
+type, so an id stays an integer. A placeholder without a value fails its row
+and names the key. `Accept: application/json` is added when no Accept header
+is named, and `Content-Type: application/json` when a request has a body.
+
+**Budgets are judged here**, unlike in `perf:pages`: a request runs on the rows
+of your fixture, so its budget means the same thing on every run. The key in
+`page-performance.budgets` is the request name. A request over its `queries`
+shows `query-heavy`. A request with no budget and no reason in
+`page-performance.unbudgeted` shows the `unbudgeted` Defect.
+
+A write is not redirected: its 302 is its answer. A GET request follows one
+hop, as a page does. The command refuses to run in production.
+
 ## The agent skill
 
 The repository ships a skill at `.claude/skills/page-performance/SKILL.md`. Copy
@@ -320,6 +394,7 @@ nothing.
 
 ```bash
 composer test   # pint --test, phpstan level max, pest
+vendor/bin/pest tests/Feature/MeasureRequestsTest.php   # perf:requests only
 ```
 
 Every detector is proved able to **fire** and able to **stay quiet** — including

@@ -19,6 +19,11 @@ php artisan perf:pages --param=posts.show:post=hello-world  # a value for a rout
 php artisan perf:pages --json
 ```
 
+For a POST, an API write with a key or a JSON-RPC call, name the request in
+`page-performance.requests` and run `php artisan perf:requests`. Each run is
+rolled back, an outbound call fails its row, and its budget is judged by the
+request name (README part "Requests").
+
 ---
 
 ## The first thing to understand: two tables, and only one should reach zero

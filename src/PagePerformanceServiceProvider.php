@@ -6,9 +6,10 @@ namespace Olgun\PagePerformance;
 
 use Illuminate\Support\ServiceProvider;
 use Olgun\PagePerformance\Console\MeasurePages;
+use Olgun\PagePerformance\Console\MeasureRequests;
 
 /**
- * Registers the command and nothing else.
+ * Registers the two commands and nothing else.
  *
  * NOTHING IS BOUND, NO LISTENER IS REGISTERED, NO MIDDLEWARE IS ADDED. That is
  * the whole answer to "what does this cost in production": there is no
@@ -32,7 +33,7 @@ final class PagePerformanceServiceProvider extends ServiceProvider
             return;
         }
 
-        $this->commands([MeasurePages::class]);
+        $this->commands([MeasurePages::class, MeasureRequests::class]);
 
         $this->publishes([
             __DIR__.'/../config/page-performance.php' => config_path('page-performance.php'),
